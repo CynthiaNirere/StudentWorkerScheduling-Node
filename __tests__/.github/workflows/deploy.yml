@@ -1,0 +1,59 @@
+name: DEPLOY BACKEND TO AWS
+
+on:
+  push:
+    branches:
+      - dev
+  pull_request:
+    types: [closed]
+    branches:
+      - dev
+
+jobs:
+  aws-deploy:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: dev
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "20"
+      - name: Create production environment file
+        run: |
+          echo "CLIENT_ID=${{ secrets.CLIENT_ID }}" > .env
+          echo "CLIENT_SECRET=${{ secrets.CLIENT_SECRET }}" >> .env
+          echo "DB_HOST=${{ secrets.AWS_DB_HOST }}" >> .env
+          echo "DB_PORT=3306" >> .env
+          echo "DB_USER=${{ secrets.AWS_DB_USER }}" >> .env
+          echo "DB_PW=${{ secrets.AWS_DB_PW }}" >> .env
+          echo "DB_NAME=${{ secrets.AWS_DB_NAME }}" >> .env
+          echo "PORT=3131" >> .env
+          echo "NODE_ENV=production" >> .env
+      - run: npm install
+      - run: npm run bundle
+      - name: Deploy to Server
+        uses: easingthemes/ssh-deploy@main
+        env:
+          SSH_PRIVATE_KEY: ${{ secrets.SERVER_SSH_KEY }}
+          ARGS: "-rltgoDzvO --delete"
+          SOURCE: "deploy/"
+          REMOTE_HOST: project3.eaglesoftwareteam.com
+          REMOTE_USER: ubuntu
+          TARGET: "nodeapps/sev2026/t1"
+      - name: Execute SSH commands on remote server
+        uses: JimCronqvist/action-ssh@master
+        env:
+          NAME: "Root"
+        with:
+          hosts: "ubuntu@project3.eaglesoftwareteam.com"
+          privateKey: ${{ secrets.SERVER_SSH_KEY }}
+          debug: false
+          command: |
+            cd nodeapps/sev2026/t1
+            npm install --production
+            sudo systemctl stop workerscheduling-t1-backend || true
+            sudo cp tracker-t1-backend.service /lib/systemd/system/workerscheduling-t1-backend.service
+            sudo systemctl daemon-reload
+            sudo systemctl enable workerscheduling-t1-backend.service
+            sudo systemctl start workerscheduling-t1-backend.service
