@@ -14,8 +14,8 @@ const app = express();
 const corsOptions = {
   origin: [
     "http://localhost:8081",
-    "https://project3.eaglesoftwareteam.com",
-    "https://project3.eaglesoftwareteam.com:3131"
+    "https://workerscheduling.eaglesoftwareteam.com",
+    "https://workerscheduling.eaglesoftwareteam.com:3131"
   ],
   methods: ['GET', 'POST', 'PUT', 'DELETE', 'PATCH', 'OPTIONS'],
   allowedHeaders: ["Content-Type", "Authorization", "x-requested-with"],
