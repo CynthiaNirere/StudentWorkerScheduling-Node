@@ -14,8 +14,8 @@ const app = express();
 const corsOptions = {
   origin: [
     "http://localhost:8081",
-    "https://project3.eaglesoftwareteam.com",
-    "https://project3.eaglesoftwareteam.com:3131"
+    "https://workerscheduling.eaglesoftwareteam.com",
+    "https://workerscheduling.eaglesoftwareteam.com:3131"
   ],
   methods: ['GET', 'POST', 'PUT', 'DELETE', 'PATCH', 'OPTIONS'],
   allowedHeaders: ["Content-Type", "Authorization", "x-requested-with"],
@@ -43,18 +43,18 @@ app.use((req, res, next) => {
 // ========================================
 app.get("/", (req, res) => {
   res.json({ 
-    message: "Exercise Tracker API is running!",
+    message: "Worker Scheduling API is running!",
     version: "1.0.0",
     timestamp: new Date().toISOString(),
     endpoints: {
-      api: "/tracker-t1",
-      auth: "/tracker-t1/api/auth",
-      users: "/tracker-t1/api/users",
-      athletes: "/tracker-t1/api/athletes",
-      coaches: "/tracker-t1/api/coach",
-      exercises: "/tracker-t1/api/exercises",
-      plans: "/tracker-t1/api/exercise-plans",
-      goals: "/tracker-t1/api/goals"
+      api: "/workerscheduling-t1",
+      auth: "/workerscheduling-t1/api/auth",
+      users: "/workerscheduling-t1/api/users",
+      athletes: "/workerscheduling-t1/api/athletes",
+      coaches: "/workerscheduling-t1/api/coach",
+      exercises: "/workerscheduling-t1/api/exercises",
+      plans: "/workerscheduling-t1/api/exercise-plans",
+      goals: "/workerscheduling-t1/api/goals"
     }
   });
 });
@@ -62,7 +62,7 @@ app.get("/", (req, res) => {
 // ========================================
 // API Routes
 // ========================================
-app.use("/tracker-t1/api", routes);
+app.use("/workerscheduling-t1/api", routes);
 
 // ========================================
 // 404 Handler

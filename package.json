@@ -1,13 +1,13 @@
 {
   "type": "module",
-  "name": "tracker-backend",
+  "name": "workerscheduling",
   "version": "1.0.0",
-  "description": "Tracker Node.js with Rest API",
+  "description": "Backend for WorkerScheduling application",
   "main": "server.js",
   "scripts": {
     "test": "echo 'Tests temporarily disabled for deployment'",
     "start": "node server.js",
-    "bundle": "mkdir deploy && cp -r app server.js package.json package-lock.json tracker-t1-backend.service .env deploy"
+    "bundle": "mkdir deploy && cp -r app server.js package.json package-lock.json workerscheduling-t1-backend.service .env deploy"
   },
   "keywords": [
     "node.js",

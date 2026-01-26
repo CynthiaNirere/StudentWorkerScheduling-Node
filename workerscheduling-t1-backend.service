@@ -1,11 +1,11 @@
 [Unit]
-Description=Exercise Tracker T1 Backend Service
+Description=WorkerScheduling T1 Backend Service
 After=network.target
 
 [Service]
 Type=simple
 User=ubuntu
-WorkingDirectory=/home/ubuntu/nodeapps/2025/project3/t1
+WorkingDirectory=/home/ubuntu/nodeapps/sev2026/t1
 ExecStart=npm run start
 Restart=on-failure
 Environment=NODE_ENV=production
