@@ -15,7 +15,7 @@ const corsOptions = {
   origin: [
     "http://localhost:8081",
     "https://project3.eaglesoftwareteam.com",
-    "https://project3.eaglesoftwareteam.com:3121"
+    "https://project3.eaglesoftwareteam.com:3131"
   ],
   methods: ['GET', 'POST', 'PUT', 'DELETE', 'PATCH', 'OPTIONS'],
   allowedHeaders: ["Content-Type", "Authorization", "x-requested-with"],
@@ -87,7 +87,7 @@ app.use((err, req, res, next) => {
 });
 
 // Start Server
-const PORT = process.env.PORT || 3121;
+const PORT = process.env.PORT || 3131;
 if (process.env.NODE_ENV !== "test") {
   app.listen(PORT, () => {
     console.log(`✅ Server is running on port ${PORT}`); // FIXED
