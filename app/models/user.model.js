@@ -8,7 +8,7 @@ const User = sequelize.define(
       type: DataTypes.INTEGER,
       autoIncrement: true,
       primaryKey: true,
-      field: 'user_id'  // Maps to user_id in database
+      field: 'user_id'  
     },
     fName: {
       type: DataTypes.STRING(100),
