@@ -24,7 +24,7 @@ exports.login = async (req, res) => {
 
     const client = new OAuth2Client(google_id);
     
-    // Verify Google token
+  
     const ticket = await client.verifyIdToken({
       idToken: googleToken,
       audience: google_id,
