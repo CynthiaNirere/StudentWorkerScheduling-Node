@@ -3,7 +3,6 @@ import authconfig from "../config/auth.config.js";
 import { OAuth2Client } from "google-auth-library";
 import { google } from "googleapis";
 import jwt from "jsonwebtoken";
-import bcrypt from "bcrypt";
 
 const User = db.user;
 const Session = db.session;
@@ -24,7 +23,7 @@ exports.login = async (req, res) => {
 
     const client = new OAuth2Client(google_id);
     
-  
+    // Verify Google token
     const ticket = await client.verifyIdToken({
       idToken: googleToken,
       audience: google_id,
@@ -162,116 +161,6 @@ exports.login = async (req, res) => {
     console.error("Login error:", err);
     return res.status(500).send({ 
       message: err.message || "Error during login" 
-    });
-  }
-};
-
-exports.signup = async (req, res) => {
-  console.log("=== SIGNUP REQUEST ===");
-  console.log(req.body);
-  
-  try {
-    const { email, password, fName, lName, role } = req.body;
-    
-    // Validate required fields
-    if (!email || !password) {
-      return res.status(400).send({ 
-        message: "Email and password are required!" 
-      });
-    }
-    
-    // Validate email format
-    const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
-    if (!emailRegex.test(email)) {
-      return res.status(400).send({ 
-        message: "Invalid email format!" 
-      });
-    }
-    
-    // Validate password length
-    if (password.length < 6) {
-      return res.status(400).send({ 
-        message: "Password must be at least 6 characters!" 
-      });
-    }
-    
-    // Check if user already exists
-    const existingUser = await User.findOne({
-      where: {
-        email: email,
-      },
-    });
-    
-    if (existingUser) {
-      return res.status(400).send({ 
-        message: "Email already in use!" 
-      });
-    }
-    
-    // Hash the password
-    const saltRounds = 10;
-    const password_hash = await bcrypt.hash(password, saltRounds);
-    
-    // Determine role (default to employee if not specified)
-    let userRole = role || "employee";
-    
-    // Auto-assign role based on email domain if needed
-    if (email.endsWith("@eagles.oc.edu")) {
-      userRole = "employee";
-    } else if (email.endsWith("@oc.edu")) {
-      userRole = "admin";
-    }
-    
-    // Create new user
-    const newUser = {
-      fName: fName || email.split("@")[0], // Use email prefix if no name provided
-      lName: lName || "",
-      email: email,
-      password_hash: password_hash,
-      role: userRole,
-    };
-    
-    console.log("Creating new user:", { ...newUser, password_hash: "[HIDDEN]" });
-    
-    const createdUser = await User.create(newUser);
-    const user = createdUser.dataValues;
-    
-    console.log("User created successfully!");
-    
-    // Create session token
-    let token = jwt.sign({ id: email }, authconfig.secret, {
-      expiresIn: 86400, // 24 hours
-    });
-    
-    let tempExpirationDate = new Date();
-    tempExpirationDate.setDate(tempExpirationDate.getDate() + 1);
-    
-    const newSession = {
-      token: token,
-      email: email,
-      userId: user.id,
-      expirationDate: tempExpirationDate,
-    };
-    
-    await Session.create(newSession);
-    
-    console.log("Session created - returning user");
-    
-    // Return user data (without password hash)
-    return res.status(201).send({
-      message: "User registered successfully!",
-      email: user.email,
-      fName: user.fName,
-      lName: user.lName,
-      userId: user.id,
-      role: user.role,
-      token: token
-    });
-    
-  } catch (err) {
-    console.error("Signup error:", err);
-    return res.status(500).send({ 
-      message: err.message || "Error during signup" 
     });
   }
 };
