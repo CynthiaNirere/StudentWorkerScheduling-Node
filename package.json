@@ -27,6 +27,5 @@
     "parser": "^0.1.4",
     "sequelize": "^6.19.0",
     "supertest": "^6.3.3"
-
   }
 }
