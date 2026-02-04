@@ -90,7 +90,7 @@ exports.login = async (req, res) => {
         fName: firstName,
         lName: lastName,
         email: email,
-        role: email.endsWith("@eagles.oc.edu") ? "athlete" : "coach",
+        role: email.endsWith("@eagles.oc.edu") ? "employee" : "admin",
       };
       console.log("Creating new user:", newUser);
       
