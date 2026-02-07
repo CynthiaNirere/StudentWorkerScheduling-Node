@@ -1,5 +1,6 @@
 import User from "./user.model.js";
-import Session from "./session.model.js";  // Make sure this exists
+import Session from "./session.model.js";  
+import Schedule from "./schedule.model.js";
 import sequelize from "../config/sequelizeInstance.js";
 import { Sequelize } from "sequelize";
 
@@ -10,6 +11,7 @@ db.sequelize = sequelize;
 
 // Models
 db.user = User;
-db.session = Session;  // Make sure this is here
+db.session = Session;  
+db.schedule = Schedule;
 
 export default db;
