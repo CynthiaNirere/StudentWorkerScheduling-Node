@@ -3,6 +3,11 @@ import express from "express";
 import cors from "cors";
 import db from "./app/models/index.js";
 
+
+import authRoutes from "./app/routes/auth.routes.js";
+import userRoutes from "./app/routes/user.routes.js";
+import adminRoutes from "./app/routes/admin.routes.js";  // ADD THIS
+
 // Sync database
 db.sequelize.sync();
 
@@ -63,6 +68,9 @@ app.get("/", (req, res) => {
 // API Routes
 // ========================================
 app.use("/workerscheduling-t1/api", routes);
+app.use("/api/auth", authRoutes);
+app.use("/api/users", userRoutes);
+app.use("/api/admin", adminRoutes);
 
 // ========================================
 // 404 Handler
