@@ -4,36 +4,37 @@ import sequelize from "../config/sequelizeInstance.js";
 const Session = sequelize.define(
   "Session",
   {
-    id: {
+    session_id: {
       type: DataTypes.INTEGER,
       autoIncrement: true,
       primaryKey: true,
     },
-    token: {
-      type: DataTypes.STRING(500),
-      allowNull: false,
-    },
-    email: {
+    user_id: {
       type: DataTypes.STRING(255),
       allowNull: false,
     },
-    userId: {
-      type: DataTypes.INTEGER,
+    token: {
+      type: DataTypes.STRING(255),
       allowNull: false,
-      field: 'user_id'
-    },
-    expirationDate: {
-      type: DataTypes.DATE,
-      allowNull: false,
-      field: 'expiration_date'
+      unique: true,
     },
     created_at: {
-      type: DataTypes.DATE,
-      defaultValue: DataTypes.NOW,
+      type: DataTypes.BIGINT,
+      allowNull: false,
+      defaultValue: () => Date.now(),
+    },
+    is_active: {
+      type: DataTypes.INTEGER,
+      allowNull: false,
+      defaultValue: 1,
+    },
+    expires_at: {
+      type: DataTypes.BIGINT,
+      allowNull: true,
     },
   },
   {
-    tableName: "sessions",
+    tableName: "Session",
     timestamps: false,
   }
 );
