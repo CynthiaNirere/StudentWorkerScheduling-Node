@@ -1,42 +1,40 @@
 import { DataTypes } from "sequelize";
 import sequelize from "../config/sequelizeInstance.js";
 
-const Session = sequelize.define(
-  "Session",
+const JobRole = sequelize.define(
+  "JobRole",
   {
-    session_id: {
+    job_role_id: {
       type: DataTypes.INTEGER,
       autoIncrement: true,
       primaryKey: true,
     },
-    user_id: {
+    title: {
       type: DataTypes.STRING(255),
       allowNull: false,
     },
-    token: {
-      type: DataTypes.STRING(255),
+    description: {
+      type: DataTypes.TEXT,
+      allowNull: true,
+    },
+    location_id: {
+      type: DataTypes.INTEGER,
       allowNull: false,
-      unique: true,
     },
     created_at: {
       type: DataTypes.BIGINT,
       allowNull: false,
       defaultValue: () => Date.now(),
     },
-    is_active: {
-      type: DataTypes.INTEGER,
-      allowNull: false,
-      defaultValue: 1,
-    },
-    expires_at: {
+    updated_at: {
       type: DataTypes.BIGINT,
       allowNull: true,
     },
   },
   {
-    tableName: "Session",
+    tableName: "Job_Role",
     timestamps: false,
   }
 );
 
-export default Session;
+export default JobRole;
