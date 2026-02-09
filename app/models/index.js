@@ -15,4 +15,5 @@ db.user = User;
 db.session = Session;  // Make sure this is here
 db.coverage = Coverage;
 db.admin = admin;
+db.coverage = Coverage;
 export default db;
