@@ -22,12 +22,6 @@ db.sequelize = sequelize;
 
 // Models
 db.user = User;
-db.session = Session;  
-db.schedule = Schedule;
-db.availability = Availability;
-db.clock = Clock;
-
-
 db.session = Session;  // Make sure this is here
 db.coverage = Coverage;
 db.notification = Notification;

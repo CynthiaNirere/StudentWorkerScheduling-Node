@@ -16,9 +16,6 @@ const router = express.Router();
 
 router.use("/auth", authRoutes);
 router.use("/users", userRoutes);
-router.use("/schedules", scheduleRoutes);
-router.use("/availabilities", availabilityRoutes);
-router.use("/clock", clockRoutes);
 
 router.use("/coverage", coverageRoutes);
 router.use("/notifications", notificationRoutes);
