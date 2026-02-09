@@ -1,42 +1,40 @@
 import { DataTypes } from "sequelize";
 import sequelize from "../config/sequelizeInstance.js";
 
-const Session = sequelize.define(
-  "Session",
+const BusinessArea = sequelize.define(
+  "BusinessArea",
   {
-    session_id: {
+    location_id: {
       type: DataTypes.INTEGER,
       autoIncrement: true,
       primaryKey: true,
     },
-    user_id: {
+    name: {
       type: DataTypes.STRING(255),
       allowNull: false,
     },
-    token: {
-      type: DataTypes.STRING(255),
+    address: {
+      type: DataTypes.TEXT,
       allowNull: false,
-      unique: true,
     },
     created_at: {
       type: DataTypes.BIGINT,
       allowNull: false,
       defaultValue: () => Date.now(),
     },
-    is_active: {
-      type: DataTypes.INTEGER,
-      allowNull: false,
-      defaultValue: 1,
-    },
-    expires_at: {
+    updated_at: {
       type: DataTypes.BIGINT,
       allowNull: true,
     },
+    is_active: {
+      type: DataTypes.INTEGER,
+      defaultValue: 1,
+    },
   },
   {
-    tableName: "Session",
+    tableName: "Business_Area",
     timestamps: false,
   }
 );
 
-export default Session;
+export default BusinessArea;
