@@ -3,13 +3,6 @@ import express from "express";
 import cors from "cors";
 import db from "./app/models/index.js";
 
-import authRoutes from "./app/routes/auth.routes.js";
-import userRoutes from "./app/routes/user.routes.js";
-import adminRoutes from "./app/routes/admin.routes.js";
-import businessAreaRoutes from "./app/routes/businessArea.routes.js";
-import jobRoleRoutes from "./app/routes/jobRole.routes.js";
-import sessionRoutes from "./app/routes/session.routes.js";
-
 // Database tables are managed via team SQL schema — do not use sync()
 // db.sequelize.sync();
 
@@ -70,12 +63,6 @@ app.get("/", (req, res) => {
 // API Routes
 // ========================================
 app.use("/workerscheduling-t1/api", routes);
-app.use("/api/auth", authRoutes);
-app.use("/api/users", userRoutes);
-app.use("/api/admin", adminRoutes);
-app.use("/api/business-areas", businessAreaRoutes);
-app.use("/api/job-roles", jobRoleRoutes);
-app.use("/api/sessions", sessionRoutes);
 
 // ========================================
 // 404 Handler
