@@ -118,7 +118,7 @@ export const remove = async (req, res) => {
     return res.status(404).send({ message: `Business area not found.` });
     
   } catch (err) {
-    console.error('❌ Error deleting business area:', err);
+    console.error(' Error deleting business area:', err);
     console.error('Error message:', err.message);
     res.status(500).send({ 
       message: err.message || "Error deleting business area." 
