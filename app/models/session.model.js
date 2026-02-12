@@ -8,32 +8,37 @@ const Session = sequelize.define(
       type: DataTypes.INTEGER,
       autoIncrement: true,
       primaryKey: true,
-    },
-    token: {
-      type: DataTypes.STRING(500),
-      allowNull: false,
-    },
-    email: {
-      type: DataTypes.STRING(255),
-      allowNull: false,
+      field: "session_id",
     },
     userId: {
+      type: DataTypes.STRING(255),
+      allowNull: false,
+      field: "user_id",
+    },
+    token: {
+      type: DataTypes.STRING(255),
+      allowNull: false,
+      unique: true,
+    },
+    createdAt: {
+      type: DataTypes.BIGINT,
+      allowNull: false,
+      field: "created_at",
+    },
+    isActive: {
       type: DataTypes.INTEGER,
       allowNull: false,
-      field: 'user_id'
+      defaultValue: 1,
+      field: "is_active",
     },
-    expirationDate: {
-      type: DataTypes.DATE,
-      allowNull: false,
-      field: 'expiration_date'
-    },
-    created_at: {
-      type: DataTypes.DATE,
-      defaultValue: DataTypes.NOW,
+    expiresAt: {
+      type: DataTypes.BIGINT,
+      allowNull: true,
+      field: "expires_at",
     },
   },
   {
-    tableName: "sessions",
+    tableName: "Session",
     timestamps: false,
   }
 );

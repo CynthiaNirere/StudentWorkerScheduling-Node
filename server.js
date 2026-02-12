@@ -3,8 +3,8 @@ import express from "express";
 import cors from "cors";
 import db from "./app/models/index.js";
 
-// Sync database
-db.sequelize.sync();
+// Database tables are managed via team SQL schema — do not use sync()
+// db.sequelize.sync();
 
 const app = express();
 
@@ -50,11 +50,9 @@ app.get("/", (req, res) => {
       api: "/workerscheduling-t1",
       auth: "/workerscheduling-t1/api/auth",
       users: "/workerscheduling-t1/api/users",
-      athletes: "/workerscheduling-t1/api/athletes",
-      coaches: "/workerscheduling-t1/api/coach",
-      exercises: "/workerscheduling-t1/api/exercises",
-      plans: "/workerscheduling-t1/api/exercise-plans",
-      goals: "/workerscheduling-t1/api/goals"
+      schedules: "/workerscheduling-t1/api/schedules",
+      availabilities: "/workerscheduling-t1/api/availabilities",
+      clock: "/workerscheduling-t1/api/clock"
     }
   });
 });

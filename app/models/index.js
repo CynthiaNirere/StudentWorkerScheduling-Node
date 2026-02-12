@@ -18,5 +18,14 @@ db.schedule = Schedule;
 db.availability = Availability;
 db.clock = Clock;
 
+// Associations
+User.hasMany(Session, { foreignKey: "user_id", onDelete: "CASCADE" });
+Session.belongsTo(User, { foreignKey: "user_id" });
+
+User.hasMany(Availability, { foreignKey: "user_id", onDelete: "CASCADE" });
+Availability.belongsTo(User, { foreignKey: "user_id" });
+
+User.hasMany(Clock, { foreignKey: "user_id", onDelete: "CASCADE" });
+Clock.belongsTo(User, { foreignKey: "user_id" });
 
 export default db;

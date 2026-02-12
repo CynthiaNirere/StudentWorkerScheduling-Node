@@ -3,6 +3,7 @@ import authconfig from "../config/auth.config.js";
 import { OAuth2Client } from "google-auth-library";
 import { google } from "googleapis";
 import jwt from "jsonwebtoken";
+import crypto from "crypto";
 
 const User = db.user;
 const Session = db.session;
@@ -31,6 +32,7 @@ exports.login = async (req, res) => {
     googleUser = ticket.getPayload();
     console.log("Google payload is " + JSON.stringify(googleUser));
 
+    let googleSub = googleUser.sub;
     let email = googleUser.email;
     let firstName = googleUser.given_name;
     let lastName = googleUser.family_name;
@@ -51,16 +53,17 @@ exports.login = async (req, res) => {
       });
       let { data } = await oauth2.userinfo.get();
       console.log(data);
+      googleSub = googleSub || data.id;
       email = data.email;
       firstName = data.given_name;
       lastName = data.family_name;
     }
 
+    const now = Date.now();
+
     // Find or create user
     let user = await User.findOne({
-      where: {
-        email: email,
-      },
+      where: { email: email },
     });
 
     if (user) {
@@ -71,11 +74,8 @@ exports.login = async (req, res) => {
       if (user.fName !== firstName || user.lName !== lastName) {
         try {
           await User.update(
-            { 
-              first_name: firstName,
-              last_name: lastName 
-            }, 
-            { where: { user_id: user.id } }
+            { fName: firstName, lName: lastName, updatedAt: now },
+            { where: { id: user.id } }
           );
           user.fName = firstName;
           user.lName = lastName;
@@ -85,12 +85,15 @@ exports.login = async (req, res) => {
         }
       }
     } else {
-      // Create new user
+      // Create new user — use Google sub as user_id
+      const userId = googleSub || crypto.randomUUID();
       const newUser = {
+        id: userId,
         fName: firstName,
         lName: lastName,
         email: email,
-        role: email.endsWith("@eagles.oc.edu") ? "employee" : "admin",
+        role: "employee",
+        createdAt: now,
       };
       console.log("Creating new user:", newUser);
       
@@ -102,7 +105,8 @@ exports.login = async (req, res) => {
     // Check for existing valid session
     const existingSession = await Session.findOne({
       where: {
-        email: email,
+        userId: user.id,
+        isActive: 1,
       },
     });
 
@@ -110,9 +114,9 @@ exports.login = async (req, res) => {
       const sessionData = existingSession.dataValues;
       
       // Check if session is expired
-      if (sessionData.expirationDate < Date.now()) {
-        console.log("Session expired, deleting it");
-        await Session.destroy({ where: { id: sessionData.id } });
+      if (sessionData.expiresAt && sessionData.expiresAt < now) {
+        console.log("Session expired, deactivating it");
+        await Session.update({ isActive: 0 }, { where: { id: sessionData.id } });
       } else {
         // Valid session exists, return it
         console.log("Found existing valid session");
@@ -128,22 +132,21 @@ exports.login = async (req, res) => {
     }
 
     // Create new session
-    let token = jwt.sign({ id: email }, authconfig.secret, {
+    let token = jwt.sign({ id: user.id }, authconfig.secret, {
       expiresIn: 86400,
     });
     
-    let tempExpirationDate = new Date();
-    tempExpirationDate.setDate(tempExpirationDate.getDate() + 1);
+    const expiresAt = now + (86400 * 1000); // 24 hours in ms
     
     const newSession = {
       token: token,
-      email: email,
-      userId: user.id,               
-      expirationDate: tempExpirationDate,  
+      userId: user.id,
+      createdAt: now,
+      isActive: 1,
+      expiresAt: expiresAt,
     };
 
     console.log("making a new session");
-    console.log(newSession);
 
     await Session.create(newSession);
     
@@ -167,7 +170,6 @@ exports.login = async (req, res) => {
 
 exports.logout = async (req, res) => {
   console.log("=== LOGOUT REQUEST ===");
-  console.log(req.body);
   
   // Check if request body is null or empty
   if (!req.body || !req.body.token) {
@@ -176,43 +178,24 @@ exports.logout = async (req, res) => {
     });
   }
 
-  let session = {};
-
   try {
-    const data = await Session.findAll({ where: { token: req.body.token } });
-    if (data[0] !== undefined) {
-      session = data[0].dataValues;
-    }
-  } catch (err) {
-    return res.status(500).send({
-      message: err.message || "Some error occurred while retrieving sessions.",
-    });
-  }
+    const session = await Session.findOne({ where: { token: req.body.token } });
 
-  // If session doesn't exist, user is already logged out
-  if (session.id === undefined) {
-    console.log("already logged out");
+    if (!session) {
+      console.log("already logged out");
+      return res.send({
+        message: "User has already been successfully logged out!",
+      });
+    }
+
+    // Deactivate the session
+    await Session.update({ isActive: 0 }, { where: { id: session.id } });
+    console.log("successfully logged out");
     return res.send({
-      message: "User has already been successfully logged out!",
+      message: "User has been successfully logged out!",
     });
-  }
-
-  // Delete the session
-  try {
-    const num = await Session.destroy({ where: { id: session.id } });
-    if (num == 1) {
-      console.log("successfully logged out");
-      return res.send({
-        message: "User has been successfully logged out!",
-      });
-    } else {
-      console.log("failed to delete session");
-      return res.send({
-        message: `Error logging out user.`,
-      });
-    }
   } catch (err) {
-    console.log(err);
+    console.error("Logout error:", err);
     return res.status(500).send({
       message: "Error logging out user.",
     });

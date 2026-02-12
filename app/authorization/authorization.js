@@ -3,8 +3,6 @@ import db from "../models/index.js";
 const Session = db.session;
 
 const authenticate = (req, res, next) => {
-  let token = null;
- 
   let authHeader = req.get("authorization");
   
   if (authHeader == null) {
@@ -19,32 +17,29 @@ const authenticate = (req, res, next) => {
     });
   }
   
-  token = authHeader.slice(7);
+  const token = authHeader.slice(7);
   
-  Session.findAll({ where: { token: token } })
-    .then((data) => {
-      if (!data || data.length === 0) {
+  Session.findOne({ where: { token: token, isActive: 1 } })
+    .then((session) => {
+      if (!session) {
         return res.status(401).send({
           message: "Unauthorized! Invalid Token",
         });
       }
       
-      let session = data[0];
-      console.log("Session expiration:", session.expirationDate);
-      
-      if (session.expirationDate >= Date.now()) {
-        req.user = {
-          userId: session.userId,
-          email: session.email
-        };
-        
-        console.log("User authenticated:", req.user);
-        next();
-      } else {
+      // Check expiration (BIGINT timestamp)
+      if (session.expiresAt && session.expiresAt < Date.now()) {
         return res.status(401).send({
           message: "Unauthorized! Expired Token, Logout and Login again",
         });
       }
+      
+      req.user = {
+        userId: session.userId,
+      };
+      
+      console.log("User authenticated:", req.user);
+      next();
     })
     .catch((err) => {
       console.error("Authentication error:", err.message);

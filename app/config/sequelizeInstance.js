@@ -7,6 +7,7 @@ const sequelize = new Sequelize(
   dbConfig.PASSWORD,
   {
     host: dbConfig.HOST,
+    port: dbConfig.PORT,
     dialect: dbConfig.dialect,
     pool: {
       max: dbConfig.pool.max,
@@ -14,7 +15,7 @@ const sequelize = new Sequelize(
       acquire: dbConfig.pool.acquire,
       idle: dbConfig.pool.idle,
     },
-    logging: false, // Enable SQL query logging
+    logging: false, // Set to console.log to enable SQL query logging
   },
 );
 

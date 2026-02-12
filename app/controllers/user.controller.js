@@ -1,13 +1,13 @@
 import db from "../models/index.js";
+import crypto from "crypto";
 
 const User = db.user;
-const AthleteProfile = db.athleteProfile;
 const { Op } = db.Sequelize;
 
 // Create and Save a new User
 export const create = async (req, res) => {
   try {
-    console.log(" Creating user with data:", req.body);
+    console.log("Creating user with data:", req.body);
     
     if (!req.body.fName || !req.body.email) {
       return res.status(400).send({ message: "Required fields missing!" });
@@ -19,60 +19,26 @@ export const create = async (req, res) => {
       return res.status(400).send({ message: "Email already exists" });
     }
     
-    // Create user
+    const now = Date.now();
+    
+    // Create user with generated UUID
     const user = await User.create({
+      id: crypto.randomUUID(),
       fName: req.body.fName,
       lName: req.body.lName,
       email: req.body.email,
       password_hash: req.body.password_hash || req.body.password || null,
-      role: req.body.role || "athlete",
+      role: req.body.role || "employee",
+      createdAt: now,
     });
     
     console.log("User created with ID:", user.id);
-    
-    // If athlete, create athlete profile
-    if (user.role === 'athlete' && (req.body.age || req.body.gender || req.body.sport_type || req.body.team || req.body.bio || req.body.coachId)) {
-      try {
-        await AthleteProfile.create({
-          athleteId: user.id,
-          coachId: req.body.coachId || null,
-          age: req.body.age || null,
-          gender: req.body.gender || null,
-          team: req.body.team || null,
-          sportType: req.body.sport_type || null,
-          bio: req.body.bio || null
-        });
-        console.log(" Athlete profile created");
-      } catch (profileError) {
-        console.error(" Error creating athlete profile:", profileError.message);
-        // Continue anyway - profile can be created later
-      }
-    }
-    
-    // Return formatted user data
-    const responseData = {
-      user_id: user.id,
-      first_name: user.fName,
-      last_name: user.lName,
-      email: user.email,
-      role: user.role,
-      age: req.body.age || null,
-      gender: req.body.gender || null,
-      team: req.body.team || null,
-      sport_type: req.body.sport_type || null,
-      bio: req.body.bio || null,
-      totalWorkouts: 0
-    };
-    
-    console.log(" Returning user data:", responseData);
-    res.status(201).send(responseData);
+    res.status(201).send(user);
     
   } catch (err) {
-    console.error(" Error creating user:", err.message);
-    console.error("Stack:", err.stack);
+    console.error("Error creating user:", err.message);
     res.status(500).send({
       message: err.message || "Error creating user.",
-      error: err.message
     });
   }
 };
@@ -121,7 +87,11 @@ export const findByEmail = async (req, res) => {
 export const update = async (req, res) => {
   try {
     const id = req.params.id;
-    const [updated] = await User.update(req.body, { where: { id: id } });
+    const { fName, lName, email, role, phoneNumber, workLocation } = req.body;
+    const [updated] = await User.update(
+      { fName, lName, email, role, phoneNumber, workLocation, updatedAt: Date.now() },
+      { where: { id: id } }
+    );
     if (updated === 1)
       res.send({ message: "User updated successfully." });
     else
@@ -146,43 +116,23 @@ export const remove = async (req, res) => {
     }
     
     // Delete related records first (foreign key constraints)
-    // 1. Delete athlete profile
-    await db.athleteProfile.destroy({ where: { athleteId: id } });
-    console.log('Deleted athlete profile');
-    
-    // 2. Delete coach profile
-    await db.coach.destroy({ where: { coachId: id } });
-    console.log('Deleted coach profile');
-    
-    // 3. Delete goals
-    await db.goal.destroy({ where: { athleteId: id } });
-    console.log('Deleted goals');
-    
-    // 4. Delete exercise results
-    await db.exerciseResult.destroy({ where: { athleteId: id } });
-    console.log('Deleted exercise results');
-    
-    // 5. Delete athlete plans
-    await db.athletePlan.destroy({ where: { athleteId: id } });
-    console.log('Deleted athlete plans');
-    
-    // 6. Delete sessions
     await db.session.destroy({ where: { userId: id } });
-    console.log('Deleted sessions');
+    await db.availability.destroy({ where: { userId: id } });
+    await db.clock.destroy({ where: { userId: id } });
+    console.log('Deleted related records for user', id);
     
-    // 7. Now delete the user
+    // Now delete the user
     const deleted = await User.destroy({ where: { id: id } });
     
     if (deleted) {
-      console.log(' User deleted successfully');
+      console.log('User deleted successfully');
       return res.send({ message: "User deleted successfully." });
     }
     
     return res.status(404).send({ message: `User not found.` });
     
   } catch (err) {
-    console.error(' Error deleting user:', err);
-    console.error('Error message:', err.message);
+    console.error('Error deleting user:', err);
     res.status(500).send({ 
       message: err.message || "Error deleting user." 
     });

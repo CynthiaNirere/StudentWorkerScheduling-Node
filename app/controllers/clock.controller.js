@@ -100,7 +100,8 @@ export const update = async (req, res) => {
   try {
     const id = req.params.id;
 
-    const [updated] = await Clock.update(req.body, { where: { id } });
+    const { notes, status, approvedBy, approvedAt } = req.body;
+    const [updated] = await Clock.update({ notes, status, approvedBy, approvedAt }, { where: { id } });
 
     if (updated === 1) return res.send({ message: "Clock record updated successfully." });
     return res.status(404).send({ message: "Clock record not found or no data changed." });
