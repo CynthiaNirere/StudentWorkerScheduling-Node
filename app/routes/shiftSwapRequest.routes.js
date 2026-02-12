@@ -1,5 +1,5 @@
 import express from "express";
-import * as shiftSwapRequests from "../controllers/Shiftswaprequest.controller.js";
+import * as shiftSwapRequests from "../controllers/shiftSwapRequest.controller.js";
 import authenticate from "../authorization/authorization.js";
 
 const router = express.Router();

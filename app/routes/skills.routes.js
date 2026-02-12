@@ -1,5 +1,5 @@
 import express from "express";
-import * as skills from "../controllers/skill.controller.js";
+import * as skills from "../controllers/skills.controller.js";
 import authenticate from "../authorization/authorization.js";
 
 const router = express.Router();

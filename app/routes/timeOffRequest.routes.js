@@ -1,5 +1,5 @@
 import express from "express";
-import * as timeOffRequests from "../controllers/Timeoffrequest.controller.js";
+import * as timeOffRequests from "../controllers/timeOffRequest.controller.js";
 import authenticate from "../authorization/authorization.js";
 
 const router = express.Router();

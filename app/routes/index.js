@@ -20,8 +20,8 @@ router.use("/users", userRoutes);
 router.use("/coverage", coverageRoutes);
 router.use("/notifications", notificationRoutes);
 router.use("/skills", skillRoutes);//here we add the skill routes
-router.use("/taskListItem", tasklistItem.routes);
-router.use("/taskList", taskList.routes);
+router.use("/taskListItem", tasklistItem);
+router.use("/taskList", taskList);
 router.use("/shiftSwapRequests", shiftSwapRequestRoutes);
 router.use("/timeOffRequests", timeOffRequestRoutes);
 

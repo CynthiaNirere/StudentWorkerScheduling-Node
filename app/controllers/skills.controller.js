@@ -1,4 +1,4 @@
-import Skill from "../models/skill.model.js";
+import Skill from "../models/skills.models.js";
 import UserSkill from "../models/userSkill.model.js";
 
 // Create a new Skill
