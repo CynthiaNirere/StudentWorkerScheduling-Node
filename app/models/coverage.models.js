@@ -52,7 +52,7 @@ const Coverage = sequelize.define(
     },
   },
   {
-    tableName: "coverage",
+    tableName: "Coverage",
     timestamps: false,
   }
 );

@@ -1,5 +1,5 @@
 import express from "express";
-import * as coverage from "../controllers/coverage.controller.js";
+import * as coverage from "../controllers/coverage.contoller.js";
 import authenticate from "../authorization/authorization.js";
 
 const router = express.Router();

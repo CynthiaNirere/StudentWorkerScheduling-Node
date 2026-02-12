@@ -1,22 +1,20 @@
 import { DataTypes } from "sequelize";
 import sequelize from "../config/sequelizeInstance.js";
 
-const Skill = sequelize.define(
-  "Skill",
+const UserSkill = sequelize.define(
+  "UserSkill",
   {
-    id: {
-      type: DataTypes.INTEGER,
-      autoIncrement: true,
-      primaryKey: true,
-      field: "skill_id",
-    },
-    name: {
+    userId: {
       type: DataTypes.STRING(255),
       allowNull: false,
+      primaryKey: true,
+      field: "user_id",
     },
-    description: {
-      type: DataTypes.TEXT,
-      allowNull: true,
+    skillId: {
+      type: DataTypes.INTEGER,
+      allowNull: false,
+      primaryKey: true,
+      field: "skill_id",
     },
     createdAt: {
       type: DataTypes.BIGINT,
@@ -25,9 +23,9 @@ const Skill = sequelize.define(
     },
   },
   {
-    tableName: "Skill",
+    tableName: "UserSkill",
     timestamps: false,
   }
 );
 
-export default Skill;
+export default UserSkill;
