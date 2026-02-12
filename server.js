@@ -3,6 +3,13 @@ import express from "express";
 import cors from "cors";
 import db from "./app/models/index.js";
 
+import authRoutes from "./app/routes/auth.routes.js";
+import userRoutes from "./app/routes/user.routes.js";
+import adminRoutes from "./app/routes/admin.routes.js";
+import businessAreaRoutes from "./app/routes/businessArea.routes.js";
+import jobRoleRoutes from "./app/routes/jobRole.routes.js";
+import sessionRoutes from "./app/routes/session.routes.js";
+
 // Database tables are managed via team SQL schema — do not use sync()
 // db.sequelize.sync();
 
@@ -34,7 +41,7 @@ app.use(express.urlencoded({ extended: true }));
 // Request Logging Middleware
 // ========================================
 app.use((req, res, next) => {
-  console.log(`${req.method} ${req.path}`); // FIXED
+  console.log(`${req.method} ${req.path}`);
   next();
 });
 
@@ -50,9 +57,11 @@ app.get("/", (req, res) => {
       api: "/workerscheduling-t1",
       auth: "/workerscheduling-t1/api/auth",
       users: "/workerscheduling-t1/api/users",
-      schedules: "/workerscheduling-t1/api/schedules",
-      availabilities: "/workerscheduling-t1/api/availabilities",
-      clock: "/workerscheduling-t1/api/clock"
+      athletes: "/workerscheduling-t1/api/athletes",
+      coaches: "/workerscheduling-t1/api/coach",
+      exercises: "/workerscheduling-t1/api/exercises",
+      plans: "/workerscheduling-t1/api/exercise-plans",
+      goals: "/workerscheduling-t1/api/goals"
     }
   });
 });
@@ -61,6 +70,12 @@ app.get("/", (req, res) => {
 // API Routes
 // ========================================
 app.use("/workerscheduling-t1/api", routes);
+app.use("/api/auth", authRoutes);
+app.use("/api/users", userRoutes);
+app.use("/api/admin", adminRoutes);
+app.use("/api/business-areas", businessAreaRoutes);
+app.use("/api/job-roles", jobRoleRoutes);
+app.use("/api/sessions", sessionRoutes);
 
 // ========================================
 // 404 Handler
@@ -88,7 +103,7 @@ app.use((err, req, res, next) => {
 const PORT = process.env.PORT || 3131;
 if (process.env.NODE_ENV !== "test") {
   app.listen(PORT, () => {
-    console.log(`✅ Server is running on port ${PORT}`); // FIXED
+    console.log(`✅ Server is running on port ${PORT}`);
   });
 }
 
