@@ -10,8 +10,8 @@ import businessAreaRoutes from "./app/routes/businessArea.routes.js";
 import jobRoleRoutes from "./app/routes/jobRole.routes.js";
 import sessionRoutes from "./app/routes/session.routes.js";
 
-// Sync database
-db.sequelize.sync();
+// Database tables are managed via team SQL schema — do not use sync()
+// db.sequelize.sync();
 
 const app = express();
 
@@ -55,12 +55,13 @@ app.get("/", (req, res) => {
     timestamp: new Date().toISOString(),
     endpoints: {
       api: "/workerscheduling-t1",
-      auth: "/api/auth",
-      users: "/api/users",
-      admin: "/api/admin",
-      businessAreas: "/api/business-areas",
-      jobRoles: "/api/job-roles",
-      sessions: "/api/sessions"
+      auth: "/workerscheduling-t1/api/auth",
+      users: "/workerscheduling-t1/api/users",
+      athletes: "/workerscheduling-t1/api/athletes",
+      coaches: "/workerscheduling-t1/api/coach",
+      exercises: "/workerscheduling-t1/api/exercises",
+      plans: "/workerscheduling-t1/api/exercise-plans",
+      goals: "/workerscheduling-t1/api/goals"
     }
   });
 });

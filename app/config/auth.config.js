@@ -1,5 +1,7 @@
+import 'dotenv/config';
+
 const exports = {
-  secret: "eaglesoftwareteam",
+  secret: process.env.JWT_SECRET || "eaglesoftwareteam",
 };
 
 export default exports;
