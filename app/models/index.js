@@ -1,9 +1,18 @@
 import User from "./user.model.js";
+import Session from "./session.model.js";  
+import Schedule from "./schedule.model.js";
+import Availability from "./availability.model.js";
+import Clock from "./clock.model.js";
 import Session from "./session.model.js";  // Make sure this exists
 import Coverage from "./coverage.models.js";
+import Notification from "./notifications.models.js";
+import Skill from "./skills.models.js";
+import TaskListItem from "./taskListItem.model.js";
+import TaskList from "./taskList.model.js";
+import ShiftSwapRequest from "./shiftSwapRequest.model.js";
+import TimeOffRequest from "./timeOffRequest.model.js";
+
 import sequelize from "../config/sequelizeInstance.js";
-import admin from "./admin.model.js";
-import Skill from "./skill.model.js";
 import { Sequelize } from "sequelize";
 
 const db = {};
@@ -14,7 +23,12 @@ db.sequelize = sequelize;
 // Models
 db.user = User;
 db.session = Session;  // Make sure this is here
-db.admin = admin;
 db.coverage = Coverage;
-db.skill = Skill;
+db.notification = Notification;
+db.skill = Skill;// Make sure this is here
+db.taskListItem = TaskListItem;
+db.taskList = TaskList;
+db.shiftSwapRequest = ShiftSwapRequest;
+db.timeOffRequest = TimeOffRequest;
+
 export default db;
