@@ -68,7 +68,7 @@ app.get("/", (req, res) => {
 // ========================================
 // API Routes
 // ========================================
-app.use("/workerscheduling-t1/api", routes);
+app.use("/api", routes);
 app.use("/api/auth", authRoutes);
 app.use("/api/users", userRoutes);
 app.use("/api/admin", adminRoutes);
