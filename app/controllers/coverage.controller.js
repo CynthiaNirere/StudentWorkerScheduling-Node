@@ -1,4 +1,4 @@
-import Coverage from "../models/coverage.model.js";
+import Coverage from "../models/coverage.models.js";
 
 // Create a new Coverage template
 export const create = async (req, res) => {
