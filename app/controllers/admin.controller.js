@@ -14,48 +14,72 @@ export const createUser = async (req, res) => {
   try {
     console.log("📝 Creating user with data:", req.body);
     
-    if (!req.body.first_name || !req.body.email || !req.body.role) {
-      return res.status(400).send({ message: "First name, email, and role are required!" });
+    // Handle both camelCase and snake_case from frontend
+    const firstName = req.body.firstName || req.body.first_name;
+    const lastName = req.body.lastName || req.body.last_name;
+    const email = req.body.email;
+    const phoneNumber = req.body.phoneNumber || req.body.phone_number;
+    const role = req.body.role;
+    const workLocation = req.body.workLocation || req.body.work_location;
+    
+    // Validate required fields
+    if (!firstName || !email || !role) {
+      return res.status(400).send({ 
+        message: "First name, email, and role are required!" 
+      });
     }
     
     // Check if email already exists
-    const existingUser = await User.findOne({ where: { email: req.body.email } });
+    const existingUser = await User.findOne({ where: { email: email } });
     if (existingUser) {
       return res.status(400).send({ message: "Email already exists" });
     }
     
-    // Generate user_id
-    const user_id = `user_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`;
+    // Generate a temporary password (plain text for now)
+    const tempPassword = "TempPass123!"; 
     
-    // Create user
+    // Generate user_id based on role and timestamp
+    const rolePrefix = role === 'admin' ? 'admin' : role === 'employer' ? 'mgr' : 'emp';
+    const timestamp = Date.now().toString().slice(-8);
+    const randomStr = Math.random().toString(36).substr(2, 4);
+    const user_id = `${rolePrefix}-${timestamp}-${randomStr}`;
+    
+    console.log("Generated user_id:", user_id);
+    
+    // Create user - USE 'id' because that's what the Sequelize model expects
     const user = await User.create({
-      user_id: user_id,
-      fName: req.body.first_name,
-      lName: req.body.last_name,
-      email: req.body.email,
-      password_hash: req.body.password_hash || req.body.password || null,
-      phone_number: req.body.phone_number || null,
-      role: req.body.role,
-      work_location: req.body.work_location || null,
-      created_at: Date.now()
+      id: user_id,  // CHANGED: Use 'id' instead of 'user_id'
+      email: email,
+      password_hash: tempPassword,
+      fName: firstName,
+      lName: lastName || '',
+      phone_number: phoneNumber || null,
+      role: role,
+      work_location: workLocation || null,
+      createdAt: Date.now(),
+      updatedAt: null
     });
     
-    console.log("✅ User created with ID:", user.user_id);
+    console.log("✅ User created with ID:", user.id);
     
     // Return formatted user data
     const responseData = {
-      user_id: user.user_id,
+      user_id: user.id,  // CHANGED: Use user.id
       first_name: user.fName,
       last_name: user.lName,
       email: user.email,
       phone_number: user.phone_number,
       role: user.role,
       work_location: user.work_location,
-      created_at: user.created_at
+      created_at: user.createdAt,
+      tempPassword: tempPassword
     };
     
-    console.log("✅ Returning user data:", responseData);
-    res.status(201).send(responseData);
+    console.log("✅ User created successfully");
+    res.status(201).send({
+      message: "User created successfully! Temporary password: " + tempPassword,
+      user: responseData
+    });
     
   } catch (err) {
     console.error("❌ Error creating user:", err.message);
@@ -72,8 +96,25 @@ export const getAllUsers = async (req, res) => {
   try {
     const role = req.query.role;
     const condition = role ? { role: { [Op.like]: `%${role}%` } } : undefined;
-    const users = await User.findAll({ where: condition });
-    res.send(users);
+    const users = await User.findAll({ 
+      where: condition,
+      attributes: { exclude: ['password_hash'] }
+    });
+    
+    // Format the response to match frontend expectations
+    const formattedUsers = users.map(user => ({
+      user_id: user.id,  // CHANGED: Use user.id
+      first_name: user.fName,
+      last_name: user.lName,
+      email: user.email,
+      phone_number: user.phone_number,
+      role: user.role,
+      work_location: user.work_location,
+      created_at: user.createdAt,
+      updated_at: user.updatedAt
+    }));
+    
+    res.send(formattedUsers);
   } catch (err) {
     console.error("❌ Error retrieving users:", err);
     res.status(500).send({ message: "Error retrieving users." });
@@ -83,11 +124,30 @@ export const getAllUsers = async (req, res) => {
 // Find one User by ID
 export const getUserById = async (req, res) => {
   try {
-    const id = req.params.id;
-    const user = await User.findOne({ where: { user_id: id } });
-    if (!user)
-      return res.status(404).send({ message: `User not found with id=${id}` });
-    res.send(user);
+    const userId = req.params.id;
+    const user = await User.findOne({ 
+      where: { id: userId },  // CHANGED: Use 'id' instead of 'user_id'
+      attributes: { exclude: ['password_hash'] }
+    });
+    
+    if (!user) {
+      return res.status(404).send({ message: `User not found with id=${userId}` });
+    }
+    
+    // Format response
+    const formattedUser = {
+      user_id: user.id,  // CHANGED: Use user.id
+      first_name: user.fName,
+      last_name: user.lName,
+      email: user.email,
+      phone_number: user.phone_number,
+      role: user.role,
+      work_location: user.work_location,
+      created_at: user.createdAt,
+      updated_at: user.updatedAt
+    };
+    
+    res.send(formattedUser);
   } catch (err) {
     console.error("❌ Error retrieving user:", err);
     res.status(500).send({ message: "Error retrieving user." });
@@ -97,19 +157,56 @@ export const getUserById = async (req, res) => {
 // Update a User
 export const updateUser = async (req, res) => {
   try {
-    const id = req.params.id;
+    const userId = req.params.id;
+    
+    // Handle both camelCase and snake_case
+    const updateData = {};
+    
+    if (req.body.firstName || req.body.first_name) {
+      updateData.fName = req.body.firstName || req.body.first_name;
+    }
+    if (req.body.lastName || req.body.last_name) {
+      updateData.lName = req.body.lastName || req.body.last_name;
+    }
+    if (req.body.email) {
+      updateData.email = req.body.email;
+    }
+    if (req.body.phoneNumber || req.body.phone_number) {
+      updateData.phone_number = req.body.phoneNumber || req.body.phone_number;
+    }
+    if (req.body.role) {
+      updateData.role = req.body.role;
+    }
+    if (req.body.workLocation !== undefined || req.body.work_location !== undefined) {
+      updateData.work_location = req.body.workLocation || req.body.work_location;
+    }
     
     // Add updated_at timestamp
-    const updateData = {
-      ...req.body,
-      updated_at: Date.now()
-    };
+    updateData.updatedAt = Date.now();
     
-    const [updated] = await User.update(updateData, { where: { user_id: id } });
-    if (updated === 1)
-      res.send({ message: "User updated successfully." });
-    else
+    const [updated] = await User.update(updateData, { where: { id: userId } });  // CHANGED
+    
+    if (updated === 1) {
+      const user = await User.findOne({
+        where: { id: userId },  // CHANGED
+        attributes: { exclude: ['password_hash'] }
+      });
+      
+      res.send({ 
+        message: "User updated successfully.",
+        user: {
+          user_id: user.id,  // CHANGED: Use user.id
+          first_name: user.fName,
+          last_name: user.lName,
+          email: user.email,
+          phone_number: user.phone_number,
+          role: user.role,
+          work_location: user.work_location
+        }
+      });
+    } else {
       res.status(404).send({ message: `User not found or no data changed.` });
+    }
   } catch (err) {
     console.error("❌ Error updating user:", err);
     res.status(500).send({ message: "Error updating user." });
@@ -119,25 +216,30 @@ export const updateUser = async (req, res) => {
 // Delete a User
 export const deleteUser = async (req, res) => {
   try {
-    const id = req.params.id;
+    const userId = req.params.id;
     
-    console.log(`🗑️ Deleting user ${id} and all related records...`);
+    console.log(`🗑️ Deleting user ${userId} and all related records...`);
     
     // Check if user exists first
-    const user = await User.findOne({ where: { user_id: id } });
+    const user = await User.findOne({ where: { id: userId } });  // CHANGED
     if (!user) {
       return res.status(404).send({ message: `User not found.` });
     }
     
     // Delete related records first (foreign key constraints)
-    // Delete sessions
+    // Note: Related tables use user_id as foreign key, so use user.id
     if (db.session) {
-      await db.session.destroy({ where: { user_id: id } });
+      await db.session.destroy({ where: { user_id: user.id } });
       console.log('✅ Deleted sessions');
     }
     
+    if (db.availability) {
+      await db.availability.destroy({ where: { user_id: user.id } });
+      console.log('✅ Deleted availability');
+    }
+    
     // Now delete the user
-    const deleted = await User.destroy({ where: { user_id: id } });
+    const deleted = await User.destroy({ where: { id: userId } });  // CHANGED
     
     if (deleted) {
       console.log('✅ User deleted successfully');
@@ -323,7 +425,7 @@ export const getAllJobRoles = async (req, res) => {
       where: condition,
       include: [{
         model: BusinessArea,
-        as: 'location'
+        as: 'businessArea'
       }]
     });
     res.send(jobRoles);
@@ -340,7 +442,7 @@ export const getJobRoleById = async (req, res) => {
     const jobRole = await JobRole.findByPk(id, {
       include: [{
         model: BusinessArea,
-        as: 'location'
+        as: 'businessArea'
       }]
     });
     if (!jobRole)
