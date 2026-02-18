@@ -10,9 +10,6 @@ import businessAreaRoutes from "./app/routes/businessArea.routes.js";
 import jobRoleRoutes from "./app/routes/jobRole.routes.js";
 import sessionRoutes from "./app/routes/session.routes.js";
 
-// Database tables are managed via team SQL schema — do not use sync()
-// db.sequelize.sync();
-
 const app = express();
 
 // ========================================
@@ -20,7 +17,9 @@ const app = express();
 // ========================================
 const corsOptions = {
   origin: [
+    "http://localhost:8080",
     "http://localhost:8081",
+    "http://localhost:5173",
     "https://workerscheduling.eaglesoftwareteam.com",
     "https://workerscheduling.eaglesoftwareteam.com:3131"
   ],
@@ -54,28 +53,34 @@ app.get("/", (req, res) => {
     version: "1.0.0",
     timestamp: new Date().toISOString(),
     endpoints: {
-      api: "/workerscheduling-t1",
       auth: "/workerscheduling-t1/api/auth",
       users: "/workerscheduling-t1/api/users",
-      athletes: "/workerscheduling-t1/api/athletes",
-      coaches: "/workerscheduling-t1/api/coach",
-      exercises: "/workerscheduling-t1/api/exercises",
-      plans: "/workerscheduling-t1/api/exercise-plans",
-      goals: "/workerscheduling-t1/api/goals"
+      admin: "/workerscheduling-t1/api/admin",
+      businessAreas: "/workerscheduling-t1/api/business-areas",
+      jobRoles: "/workerscheduling-t1/api/job-roles",
+      sessions: "/workerscheduling-t1/api/sessions"
     }
   });
 });
 
 // ========================================
-// API Routes
+// API Routes - ALL under /workerscheduling-t1/api
 // ========================================
+const apiRouter = express.Router();
+
+// Mount all route modules on the API router
+apiRouter.use("/auth", authRoutes);
+apiRouter.use("/users", userRoutes);
+apiRouter.use("/admin", adminRoutes);
+apiRouter.use("/business-areas", businessAreaRoutes);
+apiRouter.use("/job-roles", jobRoleRoutes);
+apiRouter.use("/sessions", sessionRoutes);
+
+// Mount the API router at the base path
+app.use("/workerscheduling-t1/api", apiRouter);
+
+// Keep the old routes for backwards compatibility if needed
 app.use("/workerscheduling-t1/api", routes);
-app.use("/api/auth", authRoutes);
-app.use("/api/users", userRoutes);
-app.use("/api/admin", adminRoutes);
-app.use("/api/business-areas", businessAreaRoutes);
-app.use("/api/job-roles", jobRoleRoutes);
-app.use("/api/sessions", sessionRoutes);
 
 // ========================================
 // 404 Handler
