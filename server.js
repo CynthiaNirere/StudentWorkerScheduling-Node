@@ -1,14 +1,7 @@
-import routes from "./app/routes/index.js";
 import express from "express";
 import cors from "cors";
 import db from "./app/models/index.js";
-
-import authRoutes from "./app/routes/auth.routes.js";
-import userRoutes from "./app/routes/user.routes.js";
-import adminRoutes from "./app/routes/admin.routes.js";
-import businessAreaRoutes from "./app/routes/businessArea.routes.js";
-import jobRoleRoutes from "./app/routes/jobRole.routes.js";
-import sessionRoutes from "./app/routes/session.routes.js";
+import routes from "./app/routes/index.js";
 
 const app = express();
 
@@ -53,33 +46,19 @@ app.get("/", (req, res) => {
     version: "1.0.0",
     timestamp: new Date().toISOString(),
     endpoints: {
+      base: "/workerscheduling-t1/api",
       auth: "/workerscheduling-t1/api/auth",
       users: "/workerscheduling-t1/api/users",
-      admin: "/workerscheduling-t1/api/admin",
+      shifts: "/workerscheduling-t1/api/shifts",
       businessAreas: "/workerscheduling-t1/api/business-areas",
       jobRoles: "/workerscheduling-t1/api/job-roles",
-      sessions: "/workerscheduling-t1/api/sessions"
     }
   });
 });
 
 // ========================================
-// API Routes - ALL under /workerscheduling-t1/api
+// API Routes - ALL routes from index.js
 // ========================================
-const apiRouter = express.Router();
-
-// Mount all route modules on the API router
-apiRouter.use("/auth", authRoutes);
-apiRouter.use("/users", userRoutes);
-apiRouter.use("/admin", adminRoutes);
-apiRouter.use("/business-areas", businessAreaRoutes);
-apiRouter.use("/job-roles", jobRoleRoutes);
-apiRouter.use("/sessions", sessionRoutes);
-
-// Mount the API router at the base path
-app.use("/workerscheduling-t1/api", apiRouter);
-
-// Keep the old routes for backwards compatibility if needed
 app.use("/workerscheduling-t1/api", routes);
 
 // ========================================
@@ -89,7 +68,13 @@ app.use((req, res) => {
   res.status(404).json({
     message: "Route not found",
     path: req.path,
-    method: req.method
+    method: req.method,
+    availableRoutes: [
+      "POST /workerscheduling-t1/api/auth/login",
+      "GET /workerscheduling-t1/api/users",
+      "GET /workerscheduling-t1/api/business-areas",
+      "GET /workerscheduling-t1/api/shifts"
+    ]
   });
 });
 
@@ -104,12 +89,24 @@ app.use((err, req, res, next) => {
   });
 });
 
-// Start Server
+// ========================================
+// Database Sync & Server Start
+// ========================================
 const PORT = process.env.PORT || 3131;
+
 if (process.env.NODE_ENV !== "test") {
-  app.listen(PORT, () => {
-    console.log(`✅ Server is running on port ${PORT}`);
-  });
+  // Sync database then start server
+  db.sequelize.sync({ alter: false })
+    .then(() => {
+      console.log("✅ Database synced");
+      app.listen(PORT, () => {
+        console.log(`✅ Server is running on port ${PORT}`);
+        console.log(`📍 API Base: http://localhost:${PORT}/workerscheduling-t1/api`);
+      });
+    })
+    .catch(err => {
+      console.error("❌ Database sync failed:", err);
+    });
 }
 
 export default app;

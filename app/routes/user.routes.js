@@ -9,7 +9,7 @@ router.get("/email/:email", authenticate, users.findByEmail);
 
 // Generic CRUD routes
 router.post("/", authenticate, users.create);
-router.get("/", authenticate, users.findAll);
+router.get("/", users.findAll);
 router.get("/:id", authenticate, users.findOne);
 router.put("/:id", authenticate, users.update);
 router.delete("/:id", authenticate, users.remove);
