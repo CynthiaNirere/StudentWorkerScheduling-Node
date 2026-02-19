@@ -1,6 +1,6 @@
 import db from "../models/index.js";
 
-const Shift = db.shift;
+const Shift = db.Shift;
 const { Op } = db.Sequelize;
 
 // Create and Save a new Shift

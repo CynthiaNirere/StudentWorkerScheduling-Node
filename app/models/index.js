@@ -12,6 +12,7 @@ import ShiftSwapRequest from "./shiftSwapRequest.model.js";
 import TimeOffRequest from "./timeOffRequest.model.js";
 import BusinessArea from "./businessArea.model.js"; 
 import JobRole from "./jobRole.model.js";
+import Shift from "./shift.model.js";
 
 import sequelize from "../config/sequelizeInstance.js";
 import { Sequelize } from "sequelize";
@@ -36,6 +37,8 @@ db.shiftSwapRequest = ShiftSwapRequest;
 db.timeOffRequest = TimeOffRequest;
 db.businessArea = BusinessArea; 
 db.jobRole = JobRole; 
+db.Shift = Shift;
+
 
 // Associations
 User.hasMany(Session, { foreignKey: "user_id", onDelete: "CASCADE" });
@@ -56,7 +59,7 @@ BusinessArea.hasMany(JobRole, {
 JobRole.belongsTo(BusinessArea, {
   foreignKey: 'location_id',
   targetKey: 'location_id',
-  as: 'businessArea'
+  as: 'location'
 });
 
 export default db;
