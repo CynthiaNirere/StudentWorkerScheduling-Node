@@ -15,9 +15,14 @@ const exports = {};
 
 exports.login = async (req, res) => {
   console.log("=== LOGIN REQUEST ===");
+  console.log("Request body:", req.body);
 
   try {
     const googleToken = req.body.credential;
+
+    if (!googleToken) {
+      return res.status(400).send({ message: "No credential provided" });
+    }
 
     const client = new OAuth2Client(google_id);
     const ticket = await client.verifyIdToken({
@@ -56,68 +61,76 @@ exports.login = async (req, res) => {
 
     if (existingUser) {
       user = existingUser.dataValues;
-      console.log("Found existing user:", user.id, "role:", user.role);
+      console.log("Found existing user:", user.user_id, "role:", user.role);
 
       // Update name if changed — but NEVER touch role or work_location
-      const nameChanged = user.fName !== firstName || user.lName !== lastName;
+      const currentFirstName = user.first_name || user.fName;
+      const currentLastName = user.last_name || user.lName;
+      const nameChanged = currentFirstName !== firstName || currentLastName !== lastName;
+      
       // Also update user_id to Google sub if it's still a placeholder
-      const idIsPlaceholder = user.id && user.id.startsWith("employer-");
+      const idIsPlaceholder = user.user_id && user.user_id.startsWith("employer-");
 
       if (nameChanged || idIsPlaceholder) {
-        const updates = { updatedAt: now };
+        const updates = { updated_at: now };
+        
         if (nameChanged) {
-          updates.fName = firstName;
-          updates.lName = lastName;
+          updates.first_name = firstName;
+          updates.last_name = lastName;
         }
+        
         if (idIsPlaceholder) {
           // Migrate placeholder ID to real Google sub
-          // Note: MySQL VARCHAR PK update — cascade must be set or do carefully
           try {
             await User.update(
-              { ...updates, id: googleSub },
-              { where: { id: user.id } }
+              { ...updates, user_id: googleSub },
+              { where: { user_id: user.user_id } }
             );
-            user.id = googleSub;
+            user.user_id = googleSub;
           } catch (pkErr) {
-            // PK update can fail if FK constraints are strict; just update name then
+            // PK update can fail if FK constraints are strict
             console.log("PK update skipped:", pkErr.message);
             if (nameChanged) {
-              await User.update(updates, { where: { id: user.id } });
+              await User.update(updates, { where: { user_id: user.user_id } });
             }
           }
         } else if (nameChanged) {
-          await User.update(updates, { where: { id: user.id } });
+          await User.update(updates, { where: { user_id: user.user_id } });
         }
-        user.fName = firstName;
-        user.lName = lastName;
+        
+        user.first_name = firstName;
+        user.last_name = lastName;
       }
     } else {
       // Brand new user — default role is employee
       const userId = googleSub || crypto.randomUUID();
       const newUser = {
-        id: userId,
-        fName: firstName,
-        lName: lastName,
+        user_id: userId,
+        first_name: firstName,
+        last_name: lastName,
         email,
         role: "employee",
-        createdAt: now,
+        created_at: now,
       };
       console.log("Creating new user:", newUser);
       const created = await User.create(newUser);
       user = created.dataValues;
-      console.log("User registered:", user.id);
+      console.log("User registered:", user.user_id);
     }
 
     // ── Session management ─────────────────────────────────────────────
     const existingSession = await Session.findOne({
-      where: { userId: user.id, isActive: 1 },
+      where: { user_id: user.user_id, is_active: 1 },
     });
 
     if (existingSession) {
       const sessionData = existingSession.dataValues;
-      if (sessionData.expiresAt && sessionData.expiresAt < now) {
+      if (sessionData.expires_at && sessionData.expires_at < now) {
         console.log("Session expired, creating new one");
-        await Session.update({ isActive: 0 }, { where: { id: sessionData.id } });
+        await Session.update(
+          { is_active: 0 }, 
+          { where: { session_id: sessionData.session_id } }
+        );
       } else {
         console.log("Returning existing valid session");
         return res.send(buildUserPayload(user, sessionData.token));
@@ -125,33 +138,38 @@ exports.login = async (req, res) => {
     }
 
     // Create new session
-    const token = jwt.sign({ id: user.id }, authconfig.secret, { expiresIn: 86400 });
+    const token = jwt.sign({ id: user.user_id }, authconfig.secret, { expiresIn: 86400 });
     const expiresAt = now + 86400 * 1000;
 
     await Session.create({
       token,
-      userId: user.id,
-      createdAt: now,
-      isActive: 1,
-      expiresAt,
+      user_id: user.user_id,
+      created_at: now,
+      is_active: 1,
+      expires_at: expiresAt,
     });
 
     console.log("New session created for", user.email, "role:", user.role);
     return res.send(buildUserPayload(user, token));
   } catch (err) {
     console.error("Login error:", err);
-    return res.status(500).send({ message: err.message || "Error during login" });
+    return res.status(500).send({ 
+      message: err.message || "Error during login",
+      error: process.env.NODE_ENV === 'development' ? err.stack : undefined
+    });
   }
 };
 
 // ── Helper: shape the response the frontend stores ─────────────────────────
 function buildUserPayload(user, token) {
   return {
-    userId: user.id,
-    user_id: user.id,   // both keys so frontend works regardless of which it reads
+    userId: user.user_id,
+    user_id: user.user_id,
     email: user.email,
-    fName: user.fName,
-    lName: user.lName,
+    fName: user.first_name || user.fName,
+    lName: user.last_name || user.lName,
+    first_name: user.first_name || user.fName,
+    last_name: user.last_name || user.lName,
     role: user.role,
     work_location: user.work_location,
     token,
@@ -170,7 +188,10 @@ exports.logout = async (req, res) => {
     if (!session) {
       return res.send({ message: "Already logged out." });
     }
-    await Session.update({ isActive: 0 }, { where: { id: session.id } });
+    await Session.update(
+      { is_active: 0 }, 
+      { where: { session_id: session.session_id } }
+    );
     console.log("Logged out successfully");
     return res.send({ message: "Logged out successfully." });
   } catch (err) {
