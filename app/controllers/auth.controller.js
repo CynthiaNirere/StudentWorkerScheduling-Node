@@ -55,98 +55,70 @@ exports.login = async (req, res) => {
     const now = Date.now();
 
     // ── Find existing user by email ────────────────────────────────────
-    let existingUser = await User.findOne({ where: { email } });
+    let user = await User.findOne({ where: { email } });
 
-    let user;
-
-    if (existingUser) {
-      user = existingUser.dataValues;
-      console.log("Found existing user:", user.user_id, "role:", user.role);
+    if (user) {
+      console.log("Found existing user:", user.id, "role:", user.role);
 
       // Update name if changed — but NEVER touch role or work_location
-      const currentFirstName = user.first_name || user.fName;
-      const currentLastName = user.last_name || user.lName;
-      const nameChanged = currentFirstName !== firstName || currentLastName !== lastName;
+      const nameChanged = user.fName !== firstName || user.lName !== lastName;
       
-      // Also update user_id to Google sub if it's still a placeholder
-      const idIsPlaceholder = user.user_id && user.user_id.startsWith("employer-");
-
-      if (nameChanged || idIsPlaceholder) {
-        const updates = { updated_at: now };
-        
-        if (nameChanged) {
-          updates.first_name = firstName;
-          updates.last_name = lastName;
-        }
-        
-        if (idIsPlaceholder) {
-          // Migrate placeholder ID to real Google sub
-          try {
-            await User.update(
-              { ...updates, user_id: googleSub },
-              { where: { user_id: user.user_id } }
-            );
-            user.user_id = googleSub;
-          } catch (pkErr) {
-            // PK update can fail if FK constraints are strict
-            console.log("PK update skipped:", pkErr.message);
-            if (nameChanged) {
-              await User.update(updates, { where: { user_id: user.user_id } });
-            }
-          }
-        } else if (nameChanged) {
-          await User.update(updates, { where: { user_id: user.user_id } });
-        }
-        
-        user.first_name = firstName;
-        user.last_name = lastName;
+      if (nameChanged) {
+        await User.update(
+          { 
+            fName: firstName, 
+            lName: lastName, 
+            updatedAt: now 
+          },
+          { where: { id: user.id } }  // Use user.id
+        );
+        user.fName = firstName;
+        user.lName = lastName;
       }
     } else {
       // Brand new user — default role is employee
       const userId = googleSub || crypto.randomUUID();
       const newUser = {
-        user_id: userId,
-        first_name: firstName,
-        last_name: lastName,
+        id: userId,  // Use 'id' not 'user_id'
+        fName: firstName,
+        lName: lastName,
         email,
         role: "employee",
-        created_at: now,
+        createdAt: now,
       };
       console.log("Creating new user:", newUser);
-      const created = await User.create(newUser);
-      user = created.dataValues;
-      console.log("User registered:", user.user_id);
+      user = await User.create(newUser);
+      console.log("User registered:", user.id);
     }
 
     // ── Session management ─────────────────────────────────────────────
     const existingSession = await Session.findOne({
-      where: { user_id: user.user_id, is_active: 1 },
+      where: { userId: user.id, isActive: 1 },  // Use user.id and camelCase
     });
 
     if (existingSession) {
-      const sessionData = existingSession.dataValues;
-      if (sessionData.expires_at && sessionData.expires_at < now) {
+      if (existingSession.expiresAt && existingSession.expiresAt < now) {
         console.log("Session expired, creating new one");
         await Session.update(
-          { is_active: 0 }, 
-          { where: { session_id: sessionData.session_id } }
+          { isActive: 0 }, 
+          { where: { id: existingSession.id } }
         );
       } else {
         console.log("Returning existing valid session");
-        return res.send(buildUserPayload(user, sessionData.token));
+        return res.send(buildUserPayload(user, existingSession.token));
       }
     }
 
     // Create new session
-    const token = jwt.sign({ id: user.user_id }, authconfig.secret, { expiresIn: 86400 });
+    const token = jwt.sign({ id: user.id }, authconfig.secret, { expiresIn: 86400 });
     const expiresAt = now + 86400 * 1000;
 
     await Session.create({
       token,
-      user_id: user.user_id,
-      created_at: now,
-      is_active: 1,
-      expires_at: expiresAt,
+      userId: user.id,  // Use camelCase - Sequelize will map to user_id
+      createdAt: now,
+      isActive: 1,
+      expiresAt: expiresAt,
     });
 
     console.log("New session created for", user.email, "role:", user.role);
@@ -163,13 +135,13 @@ exports.login = async (req, res) => {
 // ── Helper: shape the response the frontend stores ─────────────────────────
 function buildUserPayload(user, token) {
   return {
-    userId: user.user_id,
-    user_id: user.user_id,
+    userId: user.id,  // Use user.id
+    user_id: user.id,
     email: user.email,
-    fName: user.first_name || user.fName,
-    lName: user.last_name || user.lName,
-    first_name: user.first_name || user.fName,
-    last_name: user.last_name || user.lName,
+    fName: user.fName,
+    lName: user.lName,
+    first_name: user.fName,
+    last_name: user.lName,
     role: user.role,
     work_location: user.work_location,
     token,
@@ -189,8 +161,8 @@ exports.logout = async (req, res) => {
       return res.send({ message: "Already logged out." });
     }
     await Session.update(
-      { is_active: 0 }, 
-      { where: { session_id: session.session_id } }
+      { isActive: 0 },  // Use camelCase
+      { where: { id: session.id } }
     );
     console.log("Logged out successfully");
     return res.send({ message: "Logged out successfully." });
