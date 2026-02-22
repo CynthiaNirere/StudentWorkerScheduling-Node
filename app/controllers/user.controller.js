@@ -8,16 +8,18 @@ export const create = async (req, res) => {
   try {
     console.log("📝 Creating user with data:", req.body);
     
-    const firstName = req.body.firstName || req.body.first_name;
-    const lastName = req.body.lastName || req.body.last_name;
+    // Accept both naming conventions
+    const firstName = req.body.firstName || req.body.first_name || req.body.fName;
+    const lastName = req.body.lastName || req.body.last_name || req.body.lName;
     const email = req.body.email;
     const phoneNumber = req.body.phoneNumber || req.body.phone_number;
-    const role = req.body.role;
+    const role = req.body.role || 'employee';
     const workLocation = req.body.workLocation || req.body.work_location;
+    const password = req.body.password || req.body.password_hash;
     
-    if (!firstName || !email || !role) {
+    if (!firstName || !email) {
       return res.status(400).send({ 
-        message: "First name, email, and role are required!" 
+        message: "First name and email are required!" 
       });
     }
     
@@ -27,7 +29,7 @@ export const create = async (req, res) => {
       return res.status(400).send({ message: "Email already exists" });
     }
     
-    const tempPassword = "TempPass123!";
+    // Generate user_id
     const rolePrefix = role === 'admin' ? 'admin' : role === 'employer' ? 'mgr' : 'emp';
     const timestamp = Date.now().toString().slice(-8);
     const randomStr = Math.random().toString(36).substr(2, 4);
@@ -36,7 +38,7 @@ export const create = async (req, res) => {
     const user = await User.create({
       id: user_id,
       email: email,
-      password_hash: tempPassword,
+      password_hash: password || 'TempPass123!',
       fName: firstName,
       lName: lastName || '',
       phone_number: phoneNumber || null,
@@ -48,28 +50,27 @@ export const create = async (req, res) => {
     
     console.log("✅ User created with ID:", user.id);
     
+    // Return BOTH naming conventions for compatibility
     const responseData = {
       user_id: user.id,
+      userId: user.id, // for frontend
       first_name: user.fName,
       last_name: user.lName,
+      fName: user.fName, // for frontend
+      lName: user.lName, // for frontend
       email: user.email,
       phone_number: user.phone_number,
       role: user.role,
       work_location: user.work_location,
       created_at: user.createdAt,
-      tempPassword: tempPassword
     };
     
-    res.status(201).send({
-      message: "User created successfully! Temporary password: " + tempPassword,
-      user: responseData
-    });
+    res.status(201).send(responseData);
     
   } catch (err) {
     console.error("❌ Error creating user:", err.message);
     res.status(500).send({
       message: err.message || "Error creating user.",
-      error: err.message
     });
   }
 };
@@ -85,10 +86,14 @@ export const findAll = async (req, res) => {
       attributes: { exclude: ['password_hash'] }
     });
     
+    // Return BOTH naming conventions
     const formattedUsers = users.map(user => ({
       user_id: user.id,
+      userId: user.id,
       first_name: user.fName,
       last_name: user.lName,
+      fName: user.fName,
+      lName: user.lName,
       email: user.email,
       phone_number: user.phone_number,
       role: user.role,
@@ -119,8 +124,11 @@ export const findOne = async (req, res) => {
     
     const formattedUser = {
       user_id: user.id,
+      userId: user.id,
       first_name: user.fName,
       last_name: user.lName,
+      fName: user.fName,
+      lName: user.lName,
       email: user.email,
       phone_number: user.phone_number,
       role: user.role,
@@ -151,8 +159,11 @@ export const findByEmail = async (req, res) => {
     
     const formattedUser = {
       user_id: user.id,
+      userId: user.id,
       first_name: user.fName,
       last_name: user.lName,
+      fName: user.fName,
+      lName: user.lName,
       email: user.email,
       phone_number: user.phone_number,
       role: user.role,
@@ -175,11 +186,12 @@ export const update = async (req, res) => {
     
     const updateData = {};
     
-    if (req.body.firstName || req.body.first_name) {
-      updateData.fName = req.body.firstName || req.body.first_name;
+    // Accept both naming conventions
+    if (req.body.firstName || req.body.first_name || req.body.fName) {
+      updateData.fName = req.body.firstName || req.body.first_name || req.body.fName;
     }
-    if (req.body.lastName || req.body.last_name) {
-      updateData.lName = req.body.lastName || req.body.last_name;
+    if (req.body.lastName || req.body.last_name || req.body.lName) {
+      updateData.lName = req.body.lastName || req.body.last_name || req.body.lName;
     }
     if (req.body.email) {
       updateData.email = req.body.email;
@@ -208,8 +220,11 @@ export const update = async (req, res) => {
         message: "User updated successfully.",
         user: {
           user_id: user.id,
+          userId: user.id,
           first_name: user.fName,
           last_name: user.lName,
+          fName: user.fName,
+          lName: user.lName,
           email: user.email,
           phone_number: user.phone_number,
           role: user.role,

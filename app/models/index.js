@@ -13,7 +13,6 @@ import TimeOffRequest from "./timeOffRequest.model.js";
 import BusinessArea from "./businessArea.model.js"; 
 import JobRole from "./jobRole.model.js";
 import Shift from "./shift.model.js";
-
 import sequelize from "../config/sequelizeInstance.js";
 import { Sequelize } from "sequelize";
 
@@ -39,8 +38,7 @@ db.businessArea = BusinessArea;
 db.jobRole = JobRole; 
 db.Shift = Shift;
 
-
-// Associations
+// ─── USER ASSOCIATIONS ────────────────────────────────────────────────────
 User.hasMany(Session, { foreignKey: "user_id", onDelete: "CASCADE" });
 Session.belongsTo(User, { foreignKey: "user_id" });
 
@@ -49,7 +47,21 @@ Availability.belongsTo(User, { foreignKey: "user_id" });
 
 User.hasMany(Clock, { foreignKey: "user_id", onDelete: "CASCADE" });
 Clock.belongsTo(User, { foreignKey: "user_id" });
-// NEW: BusinessArea and JobRole Associations
+
+// ─── SHIFT ASSOCIATIONS ───────────────────────────────────────────────────
+// IMPORTANT: Shift belongs to User (for employee assignments)
+Shift.belongsTo(User, {
+  foreignKey: 'userId',
+  as: 'user',
+  constraints: false
+});
+
+User.hasMany(Shift, {
+  foreignKey: 'userId',
+  as: 'shifts'
+});
+
+// ─── BUSINESS AREA & JOB ROLE ASSOCIATIONS ────────────────────────────────
 BusinessArea.hasMany(JobRole, {
   foreignKey: 'location_id',
   sourceKey: 'location_id',
