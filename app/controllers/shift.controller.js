@@ -204,7 +204,7 @@ export const findOne = async (req, res) => {
     
     res.send(responseData);
   } catch (err) {
-    console.error("❌ Error retrieving shift:", err);
+    console.error("Error retrieving shift:", err);
     res.status(500).send({ message: "Error retrieving shift." });
   }
 };
@@ -280,14 +280,14 @@ export const remove = async (req, res) => {
     const deleted = await Shift.destroy({ where: { id: id } });
     
     if (deleted) {
-      console.log('✅ Shift deleted successfully');
+      console.log('Shift deleted successfully');
       return res.send({ message: "Shift deleted successfully." });
     }
     
     return res.status(404).send({ message: `Shift not found.` });
     
   } catch (err) {
-    console.error('❌ Error deleting shift:', err);
+    console.error(' Error deleting shift:', err);
     res.status(500).send({ 
       message: err.message || "Error deleting shift." 
     });
@@ -317,7 +317,7 @@ export const assignUser = async (req, res) => {
     res.send({ message: "User assigned to shift successfully.", shift });
     
   } catch (err) {
-    console.error('❌ Error assigning user to shift:', err);
+    console.error(' Error assigning user to shift:', err);
     res.status(500).send({ 
       message: err.message || "Error assigning user to shift." 
     });
@@ -342,7 +342,7 @@ export const publish = async (req, res) => {
     res.send({ message: "Shift published successfully.", shift });
     
   } catch (err) {
-    console.error('❌ Error publishing shift:', err);
+    console.error(' Error publishing shift:', err);
     res.status(500).send({ 
       message: err.message || "Error publishing shift." 
     });

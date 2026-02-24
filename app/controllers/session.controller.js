@@ -7,7 +7,7 @@ const { Op } = db.Sequelize;
 // Create and Save a new Session
 export const create = async (req, res) => {
   try {
-    console.log("📝 Creating session with data:", req.body);
+    console.log(" Creating session with data:", req.body);
     
     if (!req.body.user_id || !req.body.token) {
       return res.status(400).send({ message: "user_id and token are required!" });
@@ -21,11 +21,11 @@ export const create = async (req, res) => {
       expires_at: req.body.expires_at || null
     });
     
-    console.log("✅ Session created with ID:", session.session_id);
+    console.log(" Session created with ID:", session.session_id);
     res.status(201).send(session);
     
   } catch (err) {
-    console.error("❌ Error creating session:", err.message);
+    console.error(" Error creating session:", err.message);
     console.error("Stack:", err.stack);
     res.status(500).send({
       message: err.message || "Error creating session.",
@@ -42,7 +42,7 @@ export const findAll = async (req, res) => {
     const sessions = await Session.findAll({ where: condition });
     res.send(sessions);
   } catch (err) {
-    console.error("❌ Error retrieving sessions:", err);
+    console.error(" Error retrieving sessions:", err);
     res.status(500).send({ message: "Error retrieving sessions." });
   }
 };
@@ -56,7 +56,7 @@ export const findOne = async (req, res) => {
       return res.status(404).send({ message: `Session not found with id=${id}` });
     res.send(session);
   } catch (err) {
-    console.error("❌ Error retrieving session:", err);
+    console.error(" Error retrieving session:", err);
     res.status(500).send({ message: "Error retrieving session." });
   }
 };
@@ -69,7 +69,7 @@ export const findByToken = async (req, res) => {
     if (!session) return res.status(404).send({ message: "Session not found." });
     res.send(session);
   } catch (err) {
-    console.error("❌ Error retrieving session by token:", err);
+    console.error(" Error retrieving session by token:", err);
     res.status(500).send({ message: "Error retrieving session by token." });
   }
 };
@@ -84,7 +84,7 @@ export const update = async (req, res) => {
     else
       res.status(404).send({ message: `Session not found or no data changed.` });
   } catch (err) {
-    console.error("❌ Error updating session:", err);
+    console.error(" Error updating session:", err);
     res.status(500).send({ message: "Error updating session." });
   }
 };
@@ -106,14 +106,14 @@ export const remove = async (req, res) => {
     const deleted = await Session.destroy({ where: { session_id: id } });
     
     if (deleted) {
-      console.log('✅ Session deleted successfully');
+      console.log(' Session deleted successfully');
       return res.send({ message: "Session deleted successfully." });
     }
     
     return res.status(404).send({ message: `Session not found.` });
     
   } catch (err) {
-    console.error('❌ Error deleting session:', err);
+    console.error(' Error deleting session:', err);
     console.error('Error message:', err.message);
     res.status(500).send({ 
       message: err.message || "Error deleting session." 
