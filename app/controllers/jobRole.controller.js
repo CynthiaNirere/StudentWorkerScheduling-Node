@@ -7,7 +7,7 @@ const { Op } = db.Sequelize;
 // Create and Save a new Job Role
 export const create = async (req, res) => {
   try {
-    console.log("📝 Creating job role with data:", req.body);
+    console.log(" Creating job role with data:", req.body);
     
     if (!req.body.title || !req.body.location_id) {
       return res.status(400).send({ message: "Title and location_id are required!" });
@@ -20,11 +20,11 @@ export const create = async (req, res) => {
       created_at: Date.now()
     });
     
-    console.log("✅ Job role created with ID:", jobRole.job_role_id);
+    console.log("Job role created with ID:", jobRole.job_role_id);
     res.status(201).send(jobRole);
     
   } catch (err) {
-    console.error("❌ Error creating job role:", err.message);
+    console.error(" Error creating job role:", err.message);
     console.error("Stack:", err.stack);
     res.status(500).send({
       message: err.message || "Error creating job role.",
@@ -47,7 +47,7 @@ export const findAll = async (req, res) => {
     });
     res.send(jobRoles);
   } catch (err) {
-    console.error("❌ Error retrieving job roles:", err);
+    console.error("Error retrieving job roles:", err);
     res.status(500).send({ message: "Error retrieving job roles." });
   }
 };
@@ -66,7 +66,7 @@ export const findOne = async (req, res) => {
       return res.status(404).send({ message: `Job role not found with id=${id}` });
     res.send(jobRole);
   } catch (err) {
-    console.error("❌ Error retrieving job role:", err);
+    console.error(" Error retrieving job role:", err);
     res.status(500).send({ message: "Error retrieving job role." });
   }
 };
@@ -88,7 +88,7 @@ export const update = async (req, res) => {
     else
       res.status(404).send({ message: `Job role not found or no data changed.` });
   } catch (err) {
-    console.error("❌ Error updating job role:", err);
+    console.error("Error updating job role:", err);
     res.status(500).send({ message: "Error updating job role." });
   }
 };
@@ -110,14 +110,14 @@ export const remove = async (req, res) => {
     const deleted = await JobRole.destroy({ where: { job_role_id: id } });
     
     if (deleted) {
-      console.log('✅ Job role deleted successfully');
+      console.log('Job role deleted successfully');
       return res.send({ message: "Job role deleted successfully." });
     }
     
     return res.status(404).send({ message: `Job role not found.` });
     
   } catch (err) {
-    console.error('❌ Error deleting job role:', err);
+    console.error('Error deleting job role:', err);
     console.error('Error message:', err.message);
     res.status(500).send({ 
       message: err.message || "Error deleting job role." 
