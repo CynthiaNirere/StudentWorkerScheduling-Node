@@ -6,9 +6,16 @@ After=network.target
 Type=simple
 User=ubuntu
 WorkingDirectory=/home/ubuntu/nodeapps/sev2026/t1
-ExecStart=npm run start
+ExecStart=/usr/bin/node server.js
 Restart=on-failure
+RestartSec=10
+StandardOutput=journal
+StandardError=journal
+SyslogIdentifier=workerscheduling-t1
+
+# Environment variables
 Environment=NODE_ENV=production
+Environment=PORT=3131
 
 [Install]
 WantedBy=multi-user.target
