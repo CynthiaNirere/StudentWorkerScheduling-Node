@@ -387,8 +387,7 @@ export const remove = async (req, res) => {
     } catch (err) {
       console.log('⚠️ Schedule: ', err.message);
     }
-    
-    // Finally, delete the user
+ 
     const deleted = await User.destroy({ where: { id: userId } });
     
     if (deleted) {
