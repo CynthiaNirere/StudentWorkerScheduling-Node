@@ -285,7 +285,6 @@ export const remove = async (req, res) => {
       console.log('⚠️ Sessions: ', err.message);
     }
     
-    // 2. Delete availability
     try {
       await db.sequelize.query(
         'DELETE FROM Availability WHERE user_id = ?',
