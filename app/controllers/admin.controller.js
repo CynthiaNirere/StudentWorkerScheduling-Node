@@ -213,7 +213,6 @@ export const updateUser = async (req, res) => {
   }
 };
 
-// Delete a User
 export const deleteUser = async (req, res) => {
   try {
     const userId = req.params.id;
