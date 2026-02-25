@@ -226,8 +226,6 @@ export const deleteUser = async (req, res) => {
       return res.status(404).send({ message: `User not found.` });
     }
     
-    // Delete all related records using raw SQL with actual database column names
-    // CRITICAL: Use userId (the parameter), not user.id
     
     try {
       await db.sequelize.query('DELETE FROM Session WHERE user_id = ?', { replacements: [userId] });
