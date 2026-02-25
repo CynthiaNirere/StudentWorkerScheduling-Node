@@ -23,7 +23,7 @@ jobs:
         run: |
           echo "CLIENT_ID=${{ secrets.CLIENT_ID }}" > .env
           echo "CLIENT_SECRET=${{ secrets.CLIENT_SECRET }}" >> .env
-          echo "DB_HOST=${{ secrets.AWS_DB_HOST }}" >> .env
+          echo "DB_HOST=localhost" >> .env
           echo "DB_PORT=3306" >> .env
           echo "DB_USER=${{ secrets.AWS_DB_USER }}" >> .env
           echo "DB_PW=${{ secrets.AWS_DB_PW }}" >> .env
