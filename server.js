@@ -5,9 +5,9 @@ import routes from "./app/routes/index.js";
 
 const app = express();
 
-// ========================================
+
 // CORS Configuration
-// ========================================
+
 const corsOptions = {
   origin: [
     "http://localhost:8080",
@@ -23,23 +23,23 @@ const corsOptions = {
 
 app.use(cors(corsOptions));
 
-// ========================================
+
 // Body Parsers
-// ========================================
+
 app.use(express.json());
 app.use(express.urlencoded({ extended: true }));
 
-// ========================================
+
 // Request Logging Middleware
-// ========================================
+
 app.use((req, res, next) => {
   console.log(`${req.method} ${req.path}`);
   next();
 });
 
-// ========================================
+
 // ROOT ROUTE - API Health Check
-// ========================================
+
 app.get("/", (req, res) => {
   res.json({ 
     message: "Worker Scheduling API is running!",
@@ -56,14 +56,13 @@ app.get("/", (req, res) => {
   });
 });
 
-// ========================================
+
 // API Routes - ALL routes from index.js
-// ========================================
+
 app.use("/workerscheduling-t1/api", routes);
 
-// ========================================
 // 404 Handler
-// ========================================
+
 app.use((req, res) => {
   res.status(404).json({
     message: "Route not found",
@@ -78,9 +77,8 @@ app.use((req, res) => {
   });
 });
 
-// ========================================
 // Error Handler
-// ========================================
+
 app.use((err, req, res, next) => {
   console.error("❌ Server Error:", err);
   res.status(err.status || 500).json({
@@ -89,23 +87,22 @@ app.use((err, req, res, next) => {
   });
 });
 
-// ========================================
 // Database Sync & Server Start
-// ========================================
+
 const PORT = process.env.PORT || 3131;
 
 if (process.env.NODE_ENV !== "test") {
   // Sync database then start server
   db.sequelize.sync({ alter: false })
     .then(() => {
-      console.log("✅ Database synced");
+      console.log("Database synced");
       app.listen(PORT, () => {
         console.log(`✅ Server is running on port ${PORT}`);
         console.log(`📍 API Base: http://localhost:${PORT}/workerscheduling-t1/api`);
       });
     })
     .catch(err => {
-      console.error("❌ Database sync failed:", err);
+      console.error("Database sync failed:", err);
     });
 }
 

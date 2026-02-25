@@ -12,7 +12,7 @@ const { Op } = db.Sequelize;
 // Create and Save a new User
 export const createUser = async (req, res) => {
   try {
-    console.log("📝 Creating user with data:", req.body);
+    console.log("Creating user with data:", req.body);
     
     // Handle both camelCase and snake_case from frontend
     const firstName = req.body.firstName || req.body.first_name;
@@ -60,7 +60,7 @@ export const createUser = async (req, res) => {
       updatedAt: null
     });
     
-    console.log("✅ User created with ID:", user.id);
+    console.log("User created with ID:", user.id);
     
     // Return formatted user data
     const responseData = {
@@ -75,14 +75,14 @@ export const createUser = async (req, res) => {
       tempPassword: tempPassword
     };
     
-    console.log("✅ User created successfully");
+    console.log(" User created successfully");
     res.status(201).send({
       message: "User created successfully! Temporary password: " + tempPassword,
       user: responseData
     });
     
   } catch (err) {
-    console.error("❌ Error creating user:", err.message);
+    console.error("Error creating user:", err.message);
     console.error("Stack:", err.stack);
     res.status(500).send({
       message: err.message || "Error creating user.",
@@ -116,7 +116,7 @@ export const getAllUsers = async (req, res) => {
     
     res.send(formattedUsers);
   } catch (err) {
-    console.error("❌ Error retrieving users:", err);
+    console.error(" Error retrieving users:", err);
     res.status(500).send({ message: "Error retrieving users." });
   }
 };
@@ -149,7 +149,7 @@ export const getUserById = async (req, res) => {
     
     res.send(formattedUser);
   } catch (err) {
-    console.error("❌ Error retrieving user:", err);
+    console.error(" Error retrieving user:", err);
     res.status(500).send({ message: "Error retrieving user." });
   }
 };
@@ -208,7 +208,7 @@ export const updateUser = async (req, res) => {
       res.status(404).send({ message: `User not found or no data changed.` });
     }
   } catch (err) {
-    console.error("❌ Error updating user:", err);
+    console.error(" Error updating user:", err);
     res.status(500).send({ message: "Error updating user." });
   }
 };
@@ -231,31 +231,31 @@ export const deleteUser = async (req, res) => {
     
     try {
       await db.sequelize.query('DELETE FROM Session WHERE user_id = ?', { replacements: [userId] });
-      console.log('✅ Deleted sessions');
+      console.log(' Deleted sessions');
     } catch (err) {
-      console.log('⚠️ Sessions:', err.message);
+      console.log(' Sessions:', err.message);
     }
     
     try {
       await db.sequelize.query('DELETE FROM Availability WHERE user_id = ?', { replacements: [userId] });
-      console.log('✅ Deleted availability');
+      console.log(' Deleted availability');
     } catch (err) {
-      console.log('⚠️ Availability:', err.message);
+      console.log(' Availability:', err.message);
     }
     
     try {
       await db.sequelize.query('DELETE FROM UserSkill WHERE user_id = ?', { replacements: [userId] });
-      console.log('✅ Deleted user skills');
+      console.log(' Deleted user skills');
     } catch (err) {
-      console.log('⚠️ UserSkill:', err.message);
+      console.log(' UserSkill:', err.message);
     }
     
     try {
       // CRITICAL: This must succeed or delete will fail
       const [results] = await db.sequelize.query('UPDATE Shift SET user_id = NULL WHERE user_id = ?', { replacements: [userId] });
-      console.log('✅ Unassigned shifts');
+      console.log(' Unassigned shifts');
     } catch (err) {
-      console.error('❌ CRITICAL - Failed to unassign shifts:', err.message);
+      console.error('CRITICAL - Failed to unassign shifts:', err.message);
       return res.status(500).send({ 
         message: 'Cannot delete user: Failed to unassign shifts. ' + err.message 
       });
@@ -263,59 +263,59 @@ export const deleteUser = async (req, res) => {
     
     try {
       await db.sequelize.query('DELETE FROM Time_Off_Request WHERE user_id = ?', { replacements: [userId] });
-      console.log('✅ Deleted time off requests');
+      console.log(' Deleted time off requests');
     } catch (err) {
-      console.log('⚠️ Time_Off_Request:', err.message);
+      console.log(' Time_Off_Request:', err.message);
     }
     
     try {
       await db.sequelize.query('DELETE FROM Shift_Swap_Request WHERE requester_id = ? OR target_user_id = ?', { replacements: [userId, userId] });
-      console.log('✅ Deleted shift swap requests');
+      console.log(' Deleted shift swap requests');
     } catch (err) {
-      console.log('⚠️ Shift_Swap_Request:', err.message);
+      console.log(' Shift_Swap_Request:', err.message);
     }
     
     try {
       await db.sequelize.query('DELETE FROM Notifications WHERE user_id = ?', { replacements: [userId] });
-      console.log('✅ Deleted notifications');
+      console.log(' Deleted notifications');
     } catch (err) {
-      console.log('⚠️ Notifications:', err.message);
+      console.log(' Notifications:', err.message);
     }
     
     try {
       await db.sequelize.query('UPDATE TaskListItem SET assigned_to = NULL WHERE assigned_to = ?', { replacements: [userId] });
-      console.log('✅ Unassigned task list items');
+      console.log(' Unassigned task list items');
     } catch (err) {
-      console.log('⚠️ TaskListItem:', err.message);
+      console.log(' TaskListItem:', err.message);
     }
     
     try {
       await db.sequelize.query('UPDATE TaskList SET created_by = NULL WHERE created_by = ?', { replacements: [userId] });
       await db.sequelize.query('UPDATE TaskList SET assigned_to = NULL WHERE assigned_to = ?', { replacements: [userId] });
-      console.log('✅ Updated task lists');
+      console.log(' Updated task lists');
     } catch (err) {
-      console.log('⚠️ TaskList:', err.message);
+      console.log('TaskList:', err.message);
     }
     
     try {
       await db.sequelize.query('UPDATE Schedule SET created_by = NULL WHERE created_by = ?', { replacements: [userId] });
-      console.log('✅ Updated schedules');
+      console.log(' Updated schedules');
     } catch (err) {
-      console.log('⚠️ Schedule:', err.message);
+      console.log(' Schedule:', err.message);
     }
     
     // Finally delete the user
     const deleted = await User.destroy({ where: { id: userId } });
     
     if (deleted) {
-      console.log('✅ User deleted successfully');
+      console.log(' User deleted successfully');
       return res.send({ message: "User deleted successfully." });
     }
     
     return res.status(404).send({ message: `User not found.` });
     
   } catch (err) {
-    console.error('❌ [ADMIN] Error deleting user:', err);
+    console.error(' [ADMIN] Error deleting user:', err);
     console.error('Error message:', err.message);
     res.status(500).send({ 
       message: err.message || "Error deleting user.",
@@ -331,7 +331,7 @@ export const deleteUser = async (req, res) => {
 // Create and Save a new Business Area
 export const createBusinessArea = async (req, res) => {
   try {
-    console.log("📝 Creating business area with data:", req.body);
+    console.log(" Creating business area with data:", req.body);
     
     if (!req.body.name || !req.body.address) {
       return res.status(400).send({ message: "Name and address are required!" });
@@ -344,11 +344,11 @@ export const createBusinessArea = async (req, res) => {
       is_active: 1
     });
     
-    console.log("✅ Business area created with ID:", businessArea.location_id);
+    console.log(" Business area created with ID:", businessArea.location_id);
     res.status(201).send(businessArea);
     
   } catch (err) {
-    console.error("❌ Error creating business area:", err.message);
+    console.error(" Error creating business area:", err.message);
     console.error("Stack:", err.stack);
     res.status(500).send({
       message: err.message || "Error creating business area.",
@@ -369,7 +369,7 @@ export const getAllBusinessAreas = async (req, res) => {
     });
     res.send(businessAreas);
   } catch (err) {
-    console.error("❌ Error retrieving business areas:", err);
+    console.error(" Error retrieving business areas:", err);
     res.status(500).send({ message: "Error retrieving business areas." });
   }
 };
@@ -388,7 +388,7 @@ export const getBusinessAreaById = async (req, res) => {
       return res.status(404).send({ message: `Business area not found with id=${id}` });
     res.send(businessArea);
   } catch (err) {
-    console.error("❌ Error retrieving business area:", err);
+    console.error(" Error retrieving business area:", err);
     res.status(500).send({ message: "Error retrieving business area." });
   }
 };
@@ -410,7 +410,7 @@ export const updateBusinessArea = async (req, res) => {
     else
       res.status(404).send({ message: `Business area not found or no data changed.` });
   } catch (err) {
-    console.error("❌ Error updating business area:", err);
+    console.error(" Error updating business area:", err);
     res.status(500).send({ message: "Error updating business area." });
   }
 };
@@ -420,7 +420,7 @@ export const deleteBusinessArea = async (req, res) => {
   try {
     const id = req.params.id;
     
-    console.log(`🗑️ Soft deleting business area ${id}...`);
+    console.log(` Soft deleting business area ${id}...`);
     
     // Check if business area exists first
     const businessArea = await BusinessArea.findByPk(id);
@@ -435,14 +435,14 @@ export const deleteBusinessArea = async (req, res) => {
     );
     
     if (updated === 1) {
-      console.log('✅ Business area deleted successfully');
+      console.log(' Business area deleted successfully');
       return res.send({ message: "Business area deleted successfully." });
     }
     
     return res.status(404).send({ message: `Business area not found.` });
     
   } catch (err) {
-    console.error('❌ Error deleting business area:', err);
+    console.error(' Error deleting business area:', err);
     console.error('Error message:', err.message);
     res.status(500).send({ 
       message: err.message || "Error deleting business area." 
