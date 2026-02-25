@@ -37,7 +37,6 @@ exports.login = async (req, res) => {
     let firstName = googleUser.given_name;
     let lastName = googleUser.family_name;
 
-    // Fallback for testing — fetch via access token if fields missing
     if (
       (!email || !firstName || !lastName) &&
       req.body.accessToken !== undefined
