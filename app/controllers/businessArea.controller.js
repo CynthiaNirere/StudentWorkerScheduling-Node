@@ -7,7 +7,7 @@ const { Op } = db.Sequelize;
 // Create and Save a new Business Area
 export const create = async (req, res) => {
   try {
-    console.log("📝 Creating business area with data:", req.body);
+    console.log("Creating business area with data:", req.body);
     
     if (!req.body.name || !req.body.address) {
       return res.status(400).send({ message: "Name and address are required!" });
@@ -20,11 +20,11 @@ export const create = async (req, res) => {
       is_active: 1
     });
     
-    console.log("✅ Business area created with ID:", businessArea.location_id);
+    console.log(" Business area created with ID:", businessArea.location_id);
     res.status(201).send(businessArea);
     
   } catch (err) {
-    console.error("❌ Error creating business area:", err.message);
+    console.error(" Error creating business area:", err.message);
     console.error("Stack:", err.stack);
     res.status(500).send({
       message: err.message || "Error creating business area.",
@@ -45,7 +45,7 @@ export const findAll = async (req, res) => {
     });
     res.send(businessAreas);
   } catch (err) {
-    console.error("❌ Error retrieving business areas:", err);
+    console.error("Error retrieving business areas:", err);
     res.status(500).send({ message: "Error retrieving business areas." });
   }
 };
@@ -64,7 +64,7 @@ export const findOne = async (req, res) => {
       return res.status(404).send({ message: `Business area not found with id=${id}` });
     res.send(businessArea);
   } catch (err) {
-    console.error("❌ Error retrieving business area:", err);
+    console.error(" Error retrieving business area:", err);
     res.status(500).send({ message: "Error retrieving business area." });
   }
 };
@@ -86,7 +86,7 @@ export const update = async (req, res) => {
     else
       res.status(404).send({ message: `Business area not found or no data changed.` });
   } catch (err) {
-    console.error("❌ Error updating business area:", err);
+    console.error(" Error updating business area:", err);
     res.status(500).send({ message: "Error updating business area." });
   }
 };
@@ -96,7 +96,7 @@ export const remove = async (req, res) => {
   try {
     const id = req.params.id;
     
-    console.log(`🗑️ Soft deleting business area ${id}...`);
+    console.log(`Soft deleting business area ${id}...`);
     
     // Check if business area exists first
     const businessArea = await BusinessArea.findByPk(id);
@@ -111,7 +111,7 @@ export const remove = async (req, res) => {
     );
     
     if (updated === 1) {
-      console.log('✅ Business area deleted successfully');
+      console.log(' Business area deleted successfully');
       return res.send({ message: "Business area deleted successfully." });
     }
     
