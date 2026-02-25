@@ -7,8 +7,8 @@ const { Op } = db.Sequelize;
 // Create and Save a new Shift
 export const create = async (req, res) => {
   try {
-    console.log("📝 Creating shift with data:", req.body);
-    console.log("📝 User from auth:", req.user);
+    console.log(" Creating shift with data:", req.body);
+    console.log(" User from auth:", req.user);
     
     // Accept both naming conventions for fields
     const shiftTime = req.body.shiftTime || req.body.shift_time;
@@ -32,7 +32,7 @@ export const create = async (req, res) => {
       createdBy = req.body.createdBy;
     }
     
-    console.log("✅ Using createdBy:", createdBy);
+    console.log(" Using createdBy:", createdBy);
     
     const shift = await Shift.create({
       shiftTime: shiftTime,
@@ -51,7 +51,7 @@ export const create = async (req, res) => {
       updatedAt: null
     });
     
-    console.log("✅ Shift created with ID:", shift.id);
+    console.log(" Shift created with ID:", shift.id);
     
     // Return with both naming conventions
     const responseData = {
@@ -78,7 +78,7 @@ export const create = async (req, res) => {
     res.status(201).send(responseData);
     
   } catch (err) {
-    console.error("❌ Error creating shift:", err);
+    console.error(" Error creating shift:", err);
     res.status(500).send({
       message: err.message || "Error creating shift.",
       error: process.env.NODE_ENV === 'development' ? err.stack : undefined
@@ -155,7 +155,7 @@ export const findAll = async (req, res) => {
     
     res.send(formattedShifts);
   } catch (err) {
-    console.error("❌ Error retrieving shifts:", err);
+    console.error(" Error retrieving shifts:", err);
     res.status(500).send({ message: "Error retrieving shifts." });
   }
 };
@@ -260,7 +260,7 @@ export const update = async (req, res) => {
       res.status(404).send({ message: `Shift not found or no data changed.` });
     }
   } catch (err) {
-    console.error("❌ Error updating shift:", err);
+    console.error("Error updating shift:", err);
     res.status(500).send({ message: "Error updating shift." });
   }
 };
@@ -270,7 +270,7 @@ export const remove = async (req, res) => {
   try {
     const id = req.params.id;
     
-    console.log(`🗑️ Deleting shift ${id}...`);
+    console.log(` Deleting shift ${id}...`);
     
     const shift = await Shift.findByPk(id);
     if (!shift) {
