@@ -6,8 +6,6 @@ import routes from "./app/routes/index.js";
 const app = express();
 
 
-// CORS Configuration
-
 const corsOptions = {
   origin: [
     "http://localhost:8080",
