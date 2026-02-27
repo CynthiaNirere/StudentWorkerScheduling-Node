@@ -90,7 +90,6 @@ exports.login = async (req, res) => {
       console.log("User registered:", user.id);
     }
 
-    // ── Session management ─────────────────────────────────────────────
     const existingSession = await Session.findOne({
       where: { userId: user.id, isActive: 1 },  // Use user.id and camelCase
     });
