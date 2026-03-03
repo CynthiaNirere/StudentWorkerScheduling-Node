@@ -5,6 +5,18 @@ const Session = db.session;
 const authenticate = (req, res, next) => {
   console.log("🔐 Authentication check for:", req.method, req.path);
   
+  // ✅ ADDED: Allow demo mode bypass
+  const isDemoMode = req.headers['x-demo-mode'] === 'true';
+  
+  if (isDemoMode) {
+    console.log("👁️ Demo mode - bypassing authentication");
+    req.user = {
+      userId: 'demo-employer',
+      isDemo: true
+    };
+    return next();
+  }
+  
   let authHeader = req.get("authorization");
   
   if (authHeader == null) {

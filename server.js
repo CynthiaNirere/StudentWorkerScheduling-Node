@@ -12,10 +12,11 @@ const corsOptions = {
     "http://localhost:8081",
     "http://localhost:5173",
     "https://workerscheduling.eaglesoftwareteam.com",
-    "https://workerscheduling.eaglesoftwareteam.com:3131"
+    "https://workerscheduling.eaglesoftwareteam.com:3131",
+    "https://project3.eaglesoftwareteam.com"  // ✅ Added back from earlier
   ],
   methods: ['GET', 'POST', 'PUT', 'DELETE', 'PATCH', 'OPTIONS'],
-  allowedHeaders: ["Content-Type", "Authorization", "x-requested-with"],
+  allowedHeaders: ["Content-Type", "Authorization", "x-requested-with", "x-demo-mode"],  // ✅ ADDED x-demo-mode
   credentials: true,
 };
 
