@@ -36,7 +36,7 @@ jobs:
         uses: easingthemes/ssh-deploy@main
         env:
           SSH_PRIVATE_KEY: ${{ secrets.SERVER_SSH_KEY }}
-          ARGS: "-rltgoDzvO --delete"
+          ARGS: "-rltgoDzvO --delete --exclude=node_modules"
           SOURCE: "deploy/"
           REMOTE_HOST: workerscheduling.eaglesoftwareteam.com
           REMOTE_USER: ubuntu
