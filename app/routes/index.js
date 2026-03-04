@@ -1,7 +1,7 @@
 import express from 'express';
 import authRoutes from "./auth.routes.js";
 import userRoutes from "./user.routes.js";
-import adminRoutes from "./admin.routes.js";  // ✅ ADD THIS
+import adminRoutes from "./admin.routes.js";
 import scheduleRoutes from "./schedule.routes.js";
 import availabilityRoutes from "./availability.routes.js";
 import clockRoutes from "./clock.routes.js";
@@ -20,22 +20,19 @@ const router = express.Router();
 
 router.use("/auth", authRoutes);
 router.use("/users", userRoutes);
-router.use("/admin", adminRoutes);  // ✅ ADD THIS
-
+router.use("/admin", adminRoutes);
 router.use("/business-areas", businessAreaRoutes);
 router.use("/job-roles", jobRoleRoutes);
-
 router.use("/shifts", shiftRoutes);
 router.use("/schedule", scheduleRoutes);
 router.use("/availability", availabilityRoutes);
-
 router.use("/clock", clockRoutes);
-
 router.use("/time-off-requests", timeOffRequestRoutes);
-router.use("/shift-swaps", shiftSwapRequestRoutes);
 
-router.use("/tasklist", taskListRoutes);
-router.use("/tasklist/items", tasklistItemRoutes);
+
+router.use("/shift-swap-requests", shiftSwapRequestRoutes);  
+router.use("/task-lists", taskListRoutes);                  
+router.use("/task-list-items", tasklistItemRoutes);         
 
 router.use("/coverage", coverageRoutes);
 router.use("/notifications", notificationRoutes);
