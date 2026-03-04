@@ -40,12 +40,6 @@ const User = sequelize.define(
       allowNull: false,
       defaultValue: "employee",
     },
-    // NEW: Job role field (separate from system role)
-    job_role: {
-      type: DataTypes.STRING(255),
-      allowNull: true,
-      comment: "Specific job role like Barista, Front Desk, Advocate, etc."
-    },
     work_location: {
       type: DataTypes.INTEGER,
       allowNull: true,
