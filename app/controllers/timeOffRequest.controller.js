@@ -56,8 +56,27 @@ export const findAll = async (req, res) => {
       condition.status = status;
     }
     
-    const requests = await TimeOffRequest.findAll({ where: condition });
-    res.send(requests);
+    const requests = await TimeOffRequest.findAll({
+      where: condition,
+      include: [
+        {
+          model: db.user,
+          as: 'employee',
+          attributes: ['id', 'fName', 'lName']
+        }
+      ]
+    });
+
+    const result = requests.map(r => {
+      const plain = r.get({ plain: true });
+      const emp = plain.employee;
+      return {
+        ...plain,
+        employeeName: emp ? `${emp.fName} ${emp.lName}` : 'Unknown',
+      };
+    });
+
+    res.send(result);
   } catch (err) {
     console.error("Error retrieving time off requests:", err);
     res.status(500).send({ message: "Error retrieving time off requests." });

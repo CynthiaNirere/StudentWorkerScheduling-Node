@@ -49,6 +49,7 @@ const authenticate = (req, res, next) => {
       }
       
       req.user = {
+        id: session.userId,
         userId: session.userId,
       };
       
