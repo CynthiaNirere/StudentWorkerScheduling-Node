@@ -24,7 +24,7 @@ export const create = async (req, res) => {
     });
     
     // Create entry in junction table for requesting user
-    if (req.user.id) {
+    if (ShiftSwapRequestUser && req.user.id) {
       await ShiftSwapRequestUser.create({
         swapId: swapRequest.id,
         userId: req.user.id,
@@ -57,8 +57,45 @@ export const findAll = async (req, res) => {
       condition.status = status;
     }
     
-    const swapRequests = await ShiftSwapRequest.findAll({ where: condition });
-    res.send(swapRequests);
+    const swapRequests = await ShiftSwapRequest.findAll({
+      where: condition,
+      include: [
+        {
+          model: db.Shift,
+          as: 'shift',
+          attributes: ['id', 'shiftTime', 'startTime', 'endTime', 'dayOfWeek']
+        },
+        {
+          model: ShiftSwapRequestUser,
+          as: 'swapUser',
+          include: [
+            {
+              model: db.user,
+              as: 'requestingUser',
+              attributes: ['id', 'fName', 'lName']
+            },
+            {
+              model: db.user,
+              as: 'acceptingUser',
+              attributes: ['id', 'fName', 'lName']
+            }
+          ]
+        }
+      ]
+    });
+
+    const result = swapRequests.map(swap => {
+      const plain = swap.get({ plain: true });
+      const reqUser = plain.swapUser?.requestingUser;
+      const accUser = plain.swapUser?.acceptingUser;
+      return {
+        ...plain,
+        requestingUserName: reqUser ? `${reqUser.fName} ${reqUser.lName}` : 'Unknown',
+        acceptingUserName: accUser ? `${accUser.fName} ${accUser.lName}` : null,
+      };
+    });
+
+    res.send(result);
   } catch (err) {
     console.error("Error retrieving shift swap requests:", err);
     res.status(500).send({ message: "Error retrieving shift swap requests." });
@@ -149,15 +186,17 @@ export const accept = async (req, res) => {
     });
     
     // Update junction table
-    await ShiftSwapRequestUser.update(
-      { 
-        acceptingUserId: acceptingUserId,
-        status: 'accepted'
-      },
-      { 
-        where: { swapId: id } 
-      }
-    );
+    if (ShiftSwapRequestUser) {
+      await ShiftSwapRequestUser.update(
+        { 
+          acceptingUserId: acceptingUserId,
+          status: 'accepted'
+        },
+        { 
+          where: { swapId: id } 
+        }
+      );
+    }
     
     res.send({ message: "Shift swap request accepted. Awaiting manager approval.", swapRequest });
     

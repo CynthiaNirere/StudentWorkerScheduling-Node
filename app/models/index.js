@@ -9,6 +9,7 @@ import Skill from "./skills.models.js";
 import TaskListItem from "./taskListItem.model.js";
 import TaskList from "./taskList.models.js";
 import ShiftSwapRequest from "./shiftSwapRequest.model.js";
+import ShiftSwapRequestUser from "./shiftSwapRequestUser.model.js";
 import TimeOffRequest from "./timeOffRequest.model.js";
 import BusinessArea from "./businessArea.model.js"; 
 import JobRole from "./jobRole.model.js";
@@ -33,6 +34,7 @@ db.skill = Skill;
 db.taskListItem = TaskListItem;
 db.taskList = TaskList;
 db.shiftSwapRequest = ShiftSwapRequest;
+db.shiftSwapRequestUser = ShiftSwapRequestUser;
 db.timeOffRequest = TimeOffRequest;
 db.businessArea = BusinessArea; 
 db.jobRole = JobRole; 
@@ -73,5 +75,17 @@ JobRole.belongsTo(BusinessArea, {
   targetKey: 'location_id',
   as: 'location'
 });
+
+// ShiftSwapRequest associations
+ShiftSwapRequest.hasOne(ShiftSwapRequestUser, { foreignKey: 'swap_id', as: 'swapUser' });
+ShiftSwapRequestUser.belongsTo(ShiftSwapRequest, { foreignKey: 'swap_id' });
+
+ShiftSwapRequest.belongsTo(Shift, { foreignKey: 'original_shift_id', targetKey: 'id', as: 'shift' });
+
+ShiftSwapRequestUser.belongsTo(User, { foreignKey: 'requesting_user_id', targetKey: 'id', as: 'requestingUser' });
+ShiftSwapRequestUser.belongsTo(User, { foreignKey: 'accepting_user_id', targetKey: 'id', as: 'acceptingUser' });
+
+// TimeOffRequest associations
+TimeOffRequest.belongsTo(User, { foreignKey: 'user_id', targetKey: 'id', as: 'employee' });
 
 export default db;
