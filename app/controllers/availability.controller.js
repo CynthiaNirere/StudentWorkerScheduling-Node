@@ -11,7 +11,7 @@ export const create = async (req, res) => {
     const now = Date.now();
 
     const availability = await Availability.create({
-      userId: req.user.userId,
+      userId: req.body.userId || req.user.userId,
       dayOfWeek: req.body.dayOfWeek,
       startTime: req.body.startTime,
       endTime: req.body.endTime,
