@@ -15,6 +15,7 @@ import timeOffRequestRoutes from "./timeOffRequest.routes.js";
 import shiftRoutes from "./shift.routes.js";
 import businessAreaRoutes from "./businessArea.routes.js";
 import jobRoleRoutes from "./jobRole.routes.js";
+import scheduleTemplateRoutes from "./scheduleTemplate.routes.js"; // ✅ NEW
 
 const router = express.Router();
 
@@ -25,15 +26,13 @@ router.use("/business-areas", businessAreaRoutes);
 router.use("/job-roles", jobRoleRoutes);
 router.use("/shifts", shiftRoutes);
 router.use("/schedule", scheduleRoutes);
+router.use("/schedule-templates", scheduleTemplateRoutes); 
 router.use("/availability", availabilityRoutes);
 router.use("/clock", clockRoutes);
 router.use("/time-off-requests", timeOffRequestRoutes);
-
-
-router.use("/shift-swap-requests", shiftSwapRequestRoutes);  
-router.use("/task-lists", taskListRoutes);                  
-router.use("/task-list-items", tasklistItemRoutes);         
-
+router.use("/shift-swap-requests", shiftSwapRequestRoutes);
+router.use("/task-lists", taskListRoutes);
+router.use("/task-list-items", tasklistItemRoutes);
 router.use("/coverage", coverageRoutes);
 router.use("/notifications", notificationRoutes);
 router.use("/skills", skillRoutes);

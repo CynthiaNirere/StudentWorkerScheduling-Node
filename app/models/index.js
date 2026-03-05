@@ -14,6 +14,7 @@ import TimeOffRequest from "./timeOffRequest.model.js";
 import BusinessArea from "./businessArea.model.js"; 
 import JobRole from "./jobRole.model.js";
 import Shift from "./shift.model.js";
+import ScheduleTemplate from "./scheduleTemplate.model.js"; 
 import sequelize from "../config/sequelizeInstance.js";
 import { Sequelize } from "sequelize";
 
@@ -39,6 +40,7 @@ db.timeOffRequest = TimeOffRequest;
 db.businessArea = BusinessArea; 
 db.jobRole = JobRole; 
 db.Shift = Shift;
+db.scheduleTemplate = ScheduleTemplate; 
 
 // ─── USER ASSOCIATIONS ────────────────────────────────────────────────────
 User.hasMany(Session, { foreignKey: "user_id", onDelete: "CASCADE" });
