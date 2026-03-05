@@ -23,6 +23,7 @@
     "googleapis": "^100.0.0",
     "jsonwebtoken": "^8.5.1",
     "mysql2": "^2.3.3",
+    "node-cron": "^4.2.1",
     "sequelize": "^6.19.0"
   },
   "devDependencies": {

@@ -52,6 +52,30 @@ const TaskList = sequelize.define(
       allowNull: true,
       field: 'location_id'
     },
+    // ✅ NEW FIELDS FOR DAILY RECURRING TASKS
+    shiftType: {
+      type: DataTypes.STRING(50),
+      defaultValue: 'all_day',
+      field: 'shift_type',
+      validate: {
+        isIn: [['morning', 'afternoon', 'evening', 'closing', 'all_day']]
+      }
+    },
+    jobRoleId: {
+      type: DataTypes.INTEGER,
+      allowNull: true,
+      field: 'job_role_id'
+    },
+    recursDaily: {
+      type: DataTypes.BOOLEAN,
+      defaultValue: false,
+      field: 'recurs_daily'
+    },
+    isTemplate: {
+      type: DataTypes.BOOLEAN,
+      defaultValue: false,
+      field: 'is_template'
+    },
     createdAt: {
       type: DataTypes.BIGINT,
       allowNull: false,
