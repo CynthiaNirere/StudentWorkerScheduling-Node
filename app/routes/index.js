@@ -15,10 +15,16 @@ import timeOffRequestRoutes from "./timeOffRequest.routes.js";
 import shiftRoutes from "./shift.routes.js";
 import businessAreaRoutes from "./businessArea.routes.js";
 import jobRoleRoutes from "./jobRole.routes.js";
-import scheduleTemplateRoutes from "./scheduleTemplate.routes.js"; // ✅ NEW
+import scheduleTemplateRoutes from "./scheduleTemplate.routes.js";
+// ✅ NEW ROUTES
+import userJobRoleRoutes from "./userJobRole.routes.js";
+import shiftTaskRoutes from "./shiftTask.routes.js";
+import messageRoutes from "./message.routes.js";
+import taskCompletionHistoryRoutes from "./taskCompletionHistory.routes.js";
 
 const router = express.Router();
 
+// ─── EXISTING ROUTES ──────────────────────────────────────────────────────
 router.use("/auth", authRoutes);
 router.use("/users", userRoutes);
 router.use("/admin", adminRoutes);
@@ -36,5 +42,14 @@ router.use("/task-list-items", tasklistItemRoutes);
 router.use("/coverage", coverageRoutes);
 router.use("/notifications", notificationRoutes);
 router.use("/skills", skillRoutes);
+
+// ✅ NEW ROUTES ────────────────────────────────────────────────────────────
+router.use("/user-job-roles", userJobRoleRoutes);
+router.use("/shift-tasks", shiftTaskRoutes);
+router.use("/messages", messageRoutes);
+
+// ✅ NEW: Task management enhancements
+router.use("/tasklistitems", tasklistItemRoutes); // Also mount on /tasklistitems for new frontend calls
+router.use("/tasklists/history", taskCompletionHistoryRoutes); // Task completion history
 
 export default router;
