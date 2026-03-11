@@ -1,19 +1,30 @@
 import express from "express";
-import * as taskListItems from "../controllers/taskListItem.controller.js";
-import authenticate from "../authorization/authorization.js";
+import * as controller from "../controllers/taskListItem.controller.js";
 
 const router = express.Router();
 
-// Basic CRUD operations
-router.post("/", authenticate, taskListItems.create);
-router.get("/", authenticate, taskListItems.findAll);
-router.get("/tasklist/:tasklistId", authenticate, taskListItems.findByTaskList);
-router.get("/:id", authenticate, taskListItems.findOne);
-router.put("/:id", authenticate, taskListItems.update);
-router.delete("/:id", authenticate, taskListItems.remove);
+// Get all task list items (with optional filter by tasklistId)
+router.get("/", controller.findAll);
 
-// Special operations
-router.put("/:id/complete", authenticate, taskListItems.complete);
-router.put("/reorder", authenticate, taskListItems.reorder);
+// Get task list items by tasklist ID
+router.get("/tasklist/:tasklistId", controller.findByTaskList);
+
+// Get single task list item
+router.get("/:id", controller.findOne);
+
+// Create new task list item
+router.post("/", controller.create);
+
+// Update task list item
+router.put("/:id", controller.update);
+
+// Delete task list item
+router.delete("/:id", controller.remove);
+
+// Mark task list item as complete
+router.put("/:id/complete", controller.complete);
+
+// Reorder items
+router.put("/reorder", controller.reorder);
 
 export default router;
