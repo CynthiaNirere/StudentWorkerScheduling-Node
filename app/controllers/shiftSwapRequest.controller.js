@@ -54,40 +54,41 @@ export const findAll = async (req, res) => {
       condition.status = status;
     }
     
-    // Build shift include with optional workplace scoping
     const shiftInclude = {
       model: db.Shift,
       as: 'shift',
       attributes: ['id', 'shiftTime', 'startTime', 'endTime', 'dayOfWeek', 'locationId']
     };
     
+    // Build requesting user include with optional workplace scoping
+    const requestingUserInclude = {
+      model: db.user,
+      as: 'requestingUser',
+      attributes: ['id', 'fName', 'lName', 'work_location']
+    };
+    
     // Scope to employer's workplace — admins see all
     if (req.workLocation && req.userRole !== 'admin') {
-      shiftInclude.where = { locationId: req.workLocation };
-      shiftInclude.required = true;
+      requestingUserInclude.where = { work_location: req.workLocation };
     }
+    
+    const swapUserInclude = {
+      model: ShiftSwapRequestUser,
+      as: 'swapUser',
+      required: req.workLocation && req.userRole !== 'admin' ? true : false,
+      include: [
+        requestingUserInclude,
+        {
+          model: db.user,
+          as: 'acceptingUser',
+          attributes: ['id', 'fName', 'lName']
+        }
+      ]
+    };
     
     const swapRequests = await ShiftSwapRequest.findAll({
       where: condition,
-      include: [
-        shiftInclude,
-        {
-          model: ShiftSwapRequestUser,
-          as: 'swapUser',
-          include: [
-            {
-              model: db.user,
-              as: 'requestingUser',
-              attributes: ['id', 'fName', 'lName']
-            },
-            {
-              model: db.user,
-              as: 'acceptingUser',
-              attributes: ['id', 'fName', 'lName']
-            }
-          ]
-        }
-      ]
+      include: [shiftInclude, swapUserInclude]
     });
 
     const result = swapRequests.map(swap => {
@@ -298,20 +299,24 @@ export const cancel = async (req, res) => {
 // Get all pending swap requests (scoped by employer's work_location)
 export const findPending = async (req, res) => {
   try {
-    const shiftInclude = {
-      model: db.Shift,
-      as: 'shift',
-      attributes: ['id', 'shiftTime', 'startTime', 'endTime', 'dayOfWeek', 'locationId']
+    const requestingUserInclude = {
+      model: db.user,
+      as: 'requestingUser',
+      attributes: ['id', 'fName', 'lName', 'work_location']
     };
     
     if (req.workLocation && req.userRole !== 'admin') {
-      shiftInclude.where = { locationId: req.workLocation };
-      shiftInclude.required = true;
+      requestingUserInclude.where = { work_location: req.workLocation };
     }
     
     const swapRequests = await ShiftSwapRequest.findAll({ 
       where: { status: 'pending' },
-      include: [shiftInclude]
+      include: [{
+        model: ShiftSwapRequestUser,
+        as: 'swapUser',
+        required: req.workLocation && req.userRole !== 'admin' ? true : false,
+        include: [requestingUserInclude]
+      }]
     });
     res.send(swapRequests);
   } catch (err) {
