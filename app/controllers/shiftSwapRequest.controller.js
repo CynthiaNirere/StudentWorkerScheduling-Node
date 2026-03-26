@@ -7,8 +7,6 @@ const { Op } = db.Sequelize;
 // Create and Save a new Shift Swap Request
 export const create = async (req, res) => {
   try {
-    console.log("Creating shift swap request with data:", req.body);
-    
     if (!req.body.originalShiftId) {
       return res.status(400).send({ message: "Original shift ID is required!" });
     }
@@ -34,7 +32,6 @@ export const create = async (req, res) => {
       });
     }
     
-    console.log("Shift swap request created with ID:", swapRequest.id);
     res.status(201).send(swapRequest);
     
   } catch (err) {
@@ -46,7 +43,7 @@ export const create = async (req, res) => {
   }
 };
 
-// Retrieve all Shift Swap Requests with optional filters
+// Retrieve all Shift Swap Requests with optional filters (scoped by employer's work_location)
 export const findAll = async (req, res) => {
   try {
     const { status } = req.query;
@@ -57,14 +54,23 @@ export const findAll = async (req, res) => {
       condition.status = status;
     }
     
+    // Build shift include with optional workplace scoping
+    const shiftInclude = {
+      model: db.Shift,
+      as: 'shift',
+      attributes: ['id', 'shiftTime', 'startTime', 'endTime', 'dayOfWeek', 'locationId']
+    };
+    
+    // Scope to employer's workplace — admins see all
+    if (req.workLocation && req.userRole !== 'admin') {
+      shiftInclude.where = { locationId: req.workLocation };
+      shiftInclude.required = true;
+    }
+    
     const swapRequests = await ShiftSwapRequest.findAll({
       where: condition,
       include: [
-        {
-          model: db.Shift,
-          as: 'shift',
-          attributes: ['id', 'shiftTime', 'startTime', 'endTime', 'dayOfWeek']
-        },
+        shiftInclude,
         {
           model: ShiftSwapRequestUser,
           as: 'swapUser',
@@ -137,8 +143,6 @@ export const remove = async (req, res) => {
   try {
     const id = req.params.id;
     
-    console.log(`Deleting shift swap request ${id}...`);
-    
     const swapRequest = await ShiftSwapRequest.findByPk(id);
     if (!swapRequest) {
       return res.status(404).send({ message: `Shift swap request not found.` });
@@ -147,7 +151,6 @@ export const remove = async (req, res) => {
     const deleted = await ShiftSwapRequest.destroy({ where: { id: id } });
     
     if (deleted) {
-      console.log('Shift swap request deleted successfully');
       return res.send({ message: "Shift swap request deleted successfully." });
     }
     
@@ -292,11 +295,23 @@ export const cancel = async (req, res) => {
   }
 };
 
-// Get all pending swap requests
+// Get all pending swap requests (scoped by employer's work_location)
 export const findPending = async (req, res) => {
   try {
+    const shiftInclude = {
+      model: db.Shift,
+      as: 'shift',
+      attributes: ['id', 'shiftTime', 'startTime', 'endTime', 'dayOfWeek', 'locationId']
+    };
+    
+    if (req.workLocation && req.userRole !== 'admin') {
+      shiftInclude.where = { locationId: req.workLocation };
+      shiftInclude.required = true;
+    }
+    
     const swapRequests = await ShiftSwapRequest.findAll({ 
-      where: { status: 'pending' }
+      where: { status: 'pending' },
+      include: [shiftInclude]
     });
     res.send(swapRequests);
   } catch (err) {

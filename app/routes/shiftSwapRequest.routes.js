@@ -1,13 +1,14 @@
 import express from "express";
 import * as shiftSwapRequests from "../controllers/shiftSwapRequest.controller.js";
 import authenticate from "../authorization/authorization.js";
+import attachLocation from "../authorization/attachLocation.js";
 
 const router = express.Router();
 
 // Basic CRUD operations
 router.post("/", authenticate, shiftSwapRequests.create);
-router.get("/", authenticate, shiftSwapRequests.findAll);
-router.get("/pending", authenticate, shiftSwapRequests.findPending);
+router.get("/", authenticate, attachLocation, shiftSwapRequests.findAll);
+router.get("/pending", authenticate, attachLocation, shiftSwapRequests.findPending);
 router.get("/:id", authenticate, shiftSwapRequests.findOne);
 router.put("/:id", authenticate, shiftSwapRequests.update);
 router.delete("/:id", authenticate, shiftSwapRequests.remove);
