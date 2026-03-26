@@ -15,7 +15,6 @@ import BusinessArea from "./businessArea.model.js";
 import JobRole from "./jobRole.model.js";
 import Shift from "./shift.model.js";
 import ScheduleTemplate from "./scheduleTemplate.model.js";
-// ✅ Import NEW model factories
 import UserJobRoleModel from "./userJobRole.model.js";
 import ShiftTaskModel from "./shiftTask.model.js";
 import MessageModel from "./message.model.js";
@@ -28,7 +27,6 @@ const db = {};
 db.Sequelize = Sequelize;
 db.sequelize = sequelize;
 
-// ─── EXISTING MODELS (Class-based, use directly) ──────────────────────────
 db.user = User;
 db.session = Session;
 db.schedule = Schedule;
@@ -46,14 +44,11 @@ db.businessArea = BusinessArea;
 db.jobRole = JobRole;
 db.Shift = Shift;
 db.scheduleTemplate = ScheduleTemplate;
-
-// ─── NEW MODELS (Factory functions, call with sequelize) ─────────────────
 db.userJobRole = UserJobRoleModel(sequelize, Sequelize);
 db.shiftTask = ShiftTaskModel(sequelize, Sequelize);
 db.message = MessageModel(sequelize, Sequelize);
 db.taskCompletionHistory = TaskCompletionHistoryModel(sequelize, Sequelize);
 
-// ─── USER ASSOCIATIONS ────────────────────────────────────────────────────
 User.hasMany(Session, { foreignKey: "user_id", onDelete: "CASCADE" });
 Session.belongsTo(User, { foreignKey: "user_id" });
 
@@ -63,7 +58,17 @@ Availability.belongsTo(User, { foreignKey: "user_id" });
 User.hasMany(Clock, { foreignKey: "user_id", onDelete: "CASCADE" });
 Clock.belongsTo(User, { foreignKey: "user_id" });
 
-// ─── SHIFT ASSOCIATIONS ───────────────────────────────────────────────────
+User.belongsTo(BusinessArea, {
+  foreignKey: 'work_location',
+  targetKey: 'location_id',
+  as: 'workplace'
+});
+BusinessArea.hasMany(User, {
+  foreignKey: 'work_location',
+  sourceKey: 'location_id',
+  as: 'employees'
+});
+
 Shift.belongsTo(User, {
   foreignKey: 'userId',
   as: 'user',
@@ -74,7 +79,6 @@ User.hasMany(Shift, {
   as: 'shifts'
 });
 
-// ─── BUSINESS AREA & JOB ROLE ASSOCIATIONS ────────────────────────────────
 BusinessArea.hasMany(JobRole, {
   foreignKey: 'location_id',
   sourceKey: 'location_id',
@@ -86,17 +90,14 @@ JobRole.belongsTo(BusinessArea, {
   as: 'location'
 });
 
-// ─── SHIFT SWAP REQUEST ASSOCIATIONS ──────────────────────────────────────
 ShiftSwapRequest.hasOne(ShiftSwapRequestUser, { foreignKey: 'swap_id', as: 'swapUser' });
 ShiftSwapRequestUser.belongsTo(ShiftSwapRequest, { foreignKey: 'swap_id' });
 ShiftSwapRequest.belongsTo(Shift, { foreignKey: 'original_shift_id', targetKey: 'id', as: 'shift' });
 ShiftSwapRequestUser.belongsTo(User, { foreignKey: 'requesting_user_id', targetKey: 'id', as: 'requestingUser' });
 ShiftSwapRequestUser.belongsTo(User, { foreignKey: 'accepting_user_id', targetKey: 'id', as: 'acceptingUser' });
 
-// ─── TIME OFF REQUEST ASSOCIATIONS ────────────────────────────────────────
 TimeOffRequest.belongsTo(User, { foreignKey: 'user_id', targetKey: 'id', as: 'employee' });
 
-// ✅ NEW: USER JOB ROLE ASSOCIATIONS ───────────────────────────────────────
 User.hasMany(db.userJobRole, {
   foreignKey: 'userId',
   as: 'jobRoles'
@@ -115,7 +116,6 @@ db.userJobRole.belongsTo(JobRole, {
   as: 'jobRole'
 });
 
-// ✅ NEW: SHIFT TASK ASSOCIATIONS ──────────────────────────────────────────
 Shift.hasMany(db.shiftTask, {
   foreignKey: 'shiftId',
   as: 'tasks'
@@ -134,7 +134,6 @@ db.shiftTask.belongsTo(TaskList, {
   as: 'taskList'
 });
 
-// ✅ NEW: MESSAGE ASSOCIATIONS ─────────────────────────────────────────────
 User.hasMany(db.message, {
   foreignKey: 'senderId',
   as: 'sentMessages'
@@ -153,7 +152,6 @@ db.message.belongsTo(User, {
   as: 'recipient'
 });
 
-// ✅ TASK LIST ITEM ASSOCIATIONS ───────────────────────────────────────────
 TaskList.hasMany(TaskListItem, {
   foreignKey: 'tasklistId',
   as: 'items'
@@ -163,7 +161,6 @@ TaskListItem.belongsTo(TaskList, {
   as: 'taskList'
 });
 
-// ✅ NEW: TASK COMPLETION HISTORY ASSOCIATIONS ─────────────────────────────
 TaskList.hasMany(db.taskCompletionHistory, {
   foreignKey: 'taskListId',
   as: 'completions'

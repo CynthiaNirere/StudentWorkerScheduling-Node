@@ -9,8 +9,6 @@ const { Op } = db.Sequelize;
 // Create and Save a new Task List
 export const create = async (req, res) => {
   try {
-    console.log("Creating task list with data:", req.body);
-    
     if (!req.body.title) {
       return res.status(400).send({ message: "Title is required!" });
     }
@@ -33,7 +31,6 @@ export const create = async (req, res) => {
       updatedAt: null
     });
     
-    console.log("Task list created with ID:", taskList.id);
     res.status(201).send(taskList);
     
   } catch (err) {
@@ -45,7 +42,7 @@ export const create = async (req, res) => {
   }
 };
 
-// Retrieve all Task Lists with optional filters
+// Retrieve all Task Lists with optional filters (scoped by employer's work_location)
 export const findAll = async (req, res) => {
   try {
     const { locationId, assignedTo, status, isTemplate } = req.query;
@@ -54,6 +51,8 @@ export const findAll = async (req, res) => {
     
     if (locationId) {
       condition.locationId = locationId;
+    } else if (req.workLocation && req.userRole !== 'admin') {
+      condition.locationId = req.workLocation;
     }
     
     if (assignedTo) {
@@ -76,7 +75,7 @@ export const findAll = async (req, res) => {
   }
 };
 
-// ✅ NEW: Get all task templates
+// Get all task templates
 export const findAllTemplates = async (req, res) => {
   try {
     const { locationId, shiftType, jobRoleId } = req.query;
@@ -107,7 +106,7 @@ export const findAllTemplates = async (req, res) => {
   }
 };
 
-// ✅ NEW: Get daily task assignments for a specific date
+// Get daily task assignments for a specific date
 export const findDailyAssignments = async (req, res) => {
   try {
     const { date } = req.params;
@@ -129,7 +128,7 @@ export const findDailyAssignments = async (req, res) => {
   }
 };
 
-// ✅ NEW: Get tasks for a specific user on a specific date
+// Get tasks for a specific user on a specific date
 export const findUserDailyTasks = async (req, res) => {
   try {
     const { userId, date } = req.params;
@@ -154,7 +153,7 @@ export const findUserDailyTasks = async (req, res) => {
   }
 };
 
-// ✅ NEW: Assign template to a specific shift
+// Assign template to a specific shift
 export const assignToShift = async (req, res) => {
   try {
     const { id } = req.params;
@@ -207,7 +206,7 @@ export const assignToShift = async (req, res) => {
   }
 };
 
-// ✅ NEW: Get completion history
+// Get completion history
 export const getCompletionHistory = async (req, res) => {
   try {
     const { date, userId, taskListId } = req.query;
@@ -275,8 +274,6 @@ export const remove = async (req, res) => {
   try {
     const id = req.params.id;
     
-    console.log(`Deleting task list ${id}...`);
-    
     const taskList = await TaskList.findByPk(id);
     if (!taskList) {
       return res.status(404).send({ message: `Task list not found.` });
@@ -285,7 +282,6 @@ export const remove = async (req, res) => {
     const deleted = await TaskList.destroy({ where: { id: id } });
     
     if (deleted) {
-      console.log('Task list deleted successfully');
       return res.send({ message: "Task list deleted successfully." });
     }
     

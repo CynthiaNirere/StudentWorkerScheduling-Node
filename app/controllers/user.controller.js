@@ -6,15 +6,13 @@ const { Op } = db.Sequelize;
 // Create and Save a new User
 export const create = async (req, res) => {
   try {
-    console.log("📝 Creating user with data:", req.body);
-    
     // Accept both naming conventions
     const firstName = req.body.firstName || req.body.first_name || req.body.fName;
     const lastName = req.body.lastName || req.body.last_name || req.body.lName;
     const email = req.body.email;
     const phoneNumber = req.body.phoneNumber || req.body.phone_number;
     const role = req.body.role || 'employee';
-    const workLocation = req.body.workLocation || req.body.work_location;
+    const workLocation = req.body.workLocation || req.body.work_location || req.workLocation;
     const password = req.body.password || req.body.password_hash;
     const age = req.body.age;
     const bio = req.body.bio;
@@ -52,8 +50,6 @@ export const create = async (req, res) => {
       updatedAt: null
     });
     
-    console.log("✅ User created with ID:", user.id);
-    
     // Return BOTH naming conventions for compatibility
     const responseData = {
       user_id: user.id,
@@ -74,25 +70,33 @@ export const create = async (req, res) => {
     res.status(201).send(responseData);
     
   } catch (err) {
-    console.error("❌ Error creating user:", err.message);
+    console.error("Error creating user:", err.message);
     res.status(500).send({
       message: err.message || "Error creating user.",
     });
   }
 };
 
-// Retrieve all Users
+// Retrieve all Users (scoped by employer's work_location)
 export const findAll = async (req, res) => {
   try {
     const role = req.query.role;
-    const condition = role ? { role: { [Op.like]: `%${role}%` } } : undefined;
+    const condition = {};
+
+    if (role) {
+      condition.role = { [Op.like]: `%${role}%` };
+    }
+
+    // Scope to employer's workplace — admins see all
+    if (req.workLocation && req.userRole !== 'admin') {
+      condition.work_location = req.workLocation;
+    }
     
     const users = await User.findAll({ 
       where: condition,
       attributes: { exclude: ['password_hash'] }
     });
     
-    // Return BOTH naming conventions
     const formattedUsers = users.map(user => ({
       user_id: user.id,
       userId: user.id,
@@ -112,7 +116,7 @@ export const findAll = async (req, res) => {
     
     res.send(formattedUsers);
   } catch (err) {
-    console.error("❌ Error retrieving users:", err);
+    console.error("Error retrieving users:", err);
     res.status(500).send({ message: "Error retrieving users." });
   }
 };
@@ -149,7 +153,7 @@ export const findOne = async (req, res) => {
     
     res.send(formattedUser);
   } catch (err) {
-    console.error("❌ Error retrieving user:", err);
+    console.error("Error retrieving user:", err);
     res.status(500).send({ message: "Error retrieving user." });
   }
 };
@@ -186,7 +190,7 @@ export const findByEmail = async (req, res) => {
     
     res.send(formattedUser);
   } catch (err) {
-    console.error("❌ Error retrieving user by email:", err);
+    console.error("Error retrieving user by email:", err);
     res.status(500).send({ message: "Error retrieving user." });
   }
 };
@@ -198,7 +202,6 @@ export const update = async (req, res) => {
     
     const updateData = {};
     
-    // Accept both naming conventions
     if (req.body.firstName || req.body.first_name || req.body.fName) {
       updateData.fName = req.body.firstName || req.body.first_name || req.body.fName;
     }
@@ -255,7 +258,7 @@ export const update = async (req, res) => {
       res.status(404).send({ message: `User not found or no data changed.` });
     }
   } catch (err) {
-    console.error("❌ Error updating user:", err);
+    console.error("Error updating user:", err);
     res.status(500).send({ message: "Error updating user." });
   }
 };
@@ -264,8 +267,6 @@ export const update = async (req, res) => {
 export const remove = async (req, res) => {
   try {
     const userId = req.params.id;
-    
-    console.log(`🗑️ Deleting user ${userId} and all related records...`);
     
     const user = await User.findOne({ where: { id: userId } });
     if (!user) {
@@ -280,9 +281,8 @@ export const remove = async (req, res) => {
         'DELETE FROM Session WHERE user_id = ?',
         { replacements: [user.id] }
       );
-      console.log('✅ Deleted sessions');
     } catch (err) {
-      console.log('⚠️ Sessions: ', err.message);
+      console.log('Sessions cleanup:', err.message);
     }
     
     try {
@@ -290,9 +290,8 @@ export const remove = async (req, res) => {
         'DELETE FROM Availability WHERE user_id = ?',
         { replacements: [user.id] }
       );
-      console.log('✅ Deleted availability');
     } catch (err) {
-      console.log('⚠️ Availability: ', err.message);
+      console.log('Availability cleanup:', err.message);
     }
     
     // 3. Delete user skills
@@ -301,9 +300,8 @@ export const remove = async (req, res) => {
         'DELETE FROM UserSkill WHERE user_id = ?',
         { replacements: [user.id] }
       );
-      console.log('✅ Deleted user skills');
     } catch (err) {
-      console.log('⚠️ UserSkill: ', err.message);
+      console.log('UserSkill cleanup:', err.message);
     }
     
     // 4. Update shifts (set user_id to NULL)
@@ -312,9 +310,8 @@ export const remove = async (req, res) => {
         'UPDATE Shift SET user_id = NULL WHERE user_id = ?',
         { replacements: [user.id] }
       );
-      console.log('✅ Unassigned shifts');
     } catch (err) {
-      console.log('⚠️ Shift: ', err.message);
+      console.log('Shift cleanup:', err.message);
     }
     
     // 5. Delete time off requests
@@ -323,9 +320,8 @@ export const remove = async (req, res) => {
         'DELETE FROM Time_Off_Request WHERE user_id = ?',
         { replacements: [user.id] }
       );
-      console.log('✅ Deleted time off requests');
     } catch (err) {
-      console.log('⚠️ Time_Off_Request: ', err.message);
+      console.log('Time_Off_Request cleanup:', err.message);
     }
     
     // 6. Delete shift swap requests
@@ -334,9 +330,8 @@ export const remove = async (req, res) => {
         'DELETE FROM Shift_Swap_Request WHERE requester_id = ? OR target_user_id = ?',
         { replacements: [user.id, user.id] }
       );
-      console.log('✅ Deleted shift swap requests');
     } catch (err) {
-      console.log('⚠️ Shift_Swap_Request: ', err.message);
+      console.log('Shift_Swap_Request cleanup:', err.message);
     }
     
     // 7. Delete notifications
@@ -345,9 +340,8 @@ export const remove = async (req, res) => {
         'DELETE FROM Notifications WHERE user_id = ?',
         { replacements: [user.id] }
       );
-      console.log('✅ Deleted notifications');
     } catch (err) {
-      console.log('⚠️ Notifications: ', err.message);
+      console.log('Notifications cleanup:', err.message);
     }
     
     // 8. Update task list items (set assigned_to to NULL)
@@ -356,9 +350,8 @@ export const remove = async (req, res) => {
         'UPDATE TaskListItem SET assigned_to = NULL WHERE assigned_to = ?',
         { replacements: [user.id] }
       );
-      console.log('✅ Unassigned task list items');
     } catch (err) {
-      console.log('⚠️ TaskListItem: ', err.message);
+      console.log('TaskListItem cleanup:', err.message);
     }
     
     // 9. Update task lists
@@ -371,9 +364,8 @@ export const remove = async (req, res) => {
         'UPDATE TaskList SET assigned_to = NULL WHERE assigned_to = ?',
         { replacements: [user.id] }
       );
-      console.log('✅ Updated task lists');
     } catch (err) {
-      console.log('⚠️ TaskList: ', err.message);
+      console.log('TaskList cleanup:', err.message);
     }
     
     // 10. Update schedules
@@ -382,22 +374,20 @@ export const remove = async (req, res) => {
         'UPDATE Schedule SET created_by = NULL WHERE created_by = ?',
         { replacements: [user.id] }
       );
-      console.log('✅ Updated schedules');
     } catch (err) {
-      console.log('⚠️ Schedule: ', err.message);
+      console.log('Schedule cleanup:', err.message);
     }
  
     const deleted = await User.destroy({ where: { id: userId } });
     
     if (deleted) {
-      console.log('✅ User deleted successfully');
       return res.send({ message: "User deleted successfully." });
     }
     
     return res.status(404).send({ message: `User not found.` });
     
   } catch (err) {
-    console.error('❌ Error deleting user:', err);
+    console.error('Error deleting user:', err);
     res.status(500).send({ 
       message: err.message || "Error deleting user.",
       error: process.env.NODE_ENV === 'development' ? err.stack : undefined
