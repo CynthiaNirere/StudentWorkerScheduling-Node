@@ -212,32 +212,34 @@ export const accept = async (req, res) => {
   }
 };
 
-// Approve a Shift Swap Request (manager/admin approves)
+// Approve a Shift Swap Request
+
 export const approve = async (req, res) => {
   try {
     const id = req.params.id;
-    
+
     const swapRequest = await ShiftSwapRequest.findByPk(id);
     if (!swapRequest) {
       return res.status(404).send({ message: `Shift swap request not found.` });
     }
-    
-    if (swapRequest.status !== 'accepted') {
-      return res.status(400).send({ message: "Request must be accepted by another employee first." });
+
+    // ✅ FIX: Allow approval from 'pending' OR 'accepted'
+    if (swapRequest.status !== 'pending' && swapRequest.status !== 'accepted') {
+      return res.status(400).send({ message: "Request has already been processed." });
     }
-    
+
     await swapRequest.update({
       status: 'approved',
-      approvedBy: req.user.id,
+      approvedBy: req.user?.id || req.user?.userId || null,
       approvedAt: Date.now()
     });
-    
+
     res.send({ message: "Shift swap request approved successfully.", swapRequest });
-    
+
   } catch (err) {
     console.error('Error approving shift swap request:', err);
-    res.status(500).send({ 
-      message: err.message || "Error approving shift swap request." 
+    res.status(500).send({
+      message: err.message || "Error approving shift swap request."
     });
   }
 };
