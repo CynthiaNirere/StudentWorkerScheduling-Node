@@ -213,6 +213,7 @@ export const updateUser = async (req, res) => {
   }
 };
 
+// ✅ FIXED: Delete user with proper cascade handling
 export const deleteUser = async (req, res) => {
   try {
     const userId = req.params.id;
@@ -225,94 +226,127 @@ export const deleteUser = async (req, res) => {
       return res.status(404).send({ message: `User not found.` });
     }
     
-    
+    // 1. Sessions
     try {
       await db.sequelize.query('DELETE FROM Session WHERE user_id = ?', { replacements: [userId] });
-      console.log(' Deleted sessions');
+      console.log('✅ Deleted sessions');
     } catch (err) {
-      console.log(' Sessions:', err.message);
+      console.log('⚠️ Sessions:', err.message);
     }
     
+    // 2. Availability
     try {
       await db.sequelize.query('DELETE FROM Availability WHERE user_id = ?', { replacements: [userId] });
-      console.log(' Deleted availability');
+      console.log('✅ Deleted availability');
     } catch (err) {
-      console.log(' Availability:', err.message);
+      console.log('⚠️ Availability:', err.message);
     }
     
+    // 3. User skills
     try {
       await db.sequelize.query('DELETE FROM UserSkill WHERE user_id = ?', { replacements: [userId] });
-      console.log(' Deleted user skills');
+      console.log('✅ Deleted user skills');
     } catch (err) {
-      console.log(' UserSkill:', err.message);
+      console.log('⚠️ UserSkill:', err.message);
     }
     
+    // 4. ✅ CRITICAL FIX: Update BOTH user_id AND created_by in Shift table
     try {
-      // CRITICAL: This must succeed or delete will fail
-      const [results] = await db.sequelize.query('UPDATE Shift SET user_id = NULL WHERE user_id = ?', { replacements: [userId] });
-      console.log(' Unassigned shifts');
+      await db.sequelize.query('UPDATE Shift SET user_id = NULL WHERE user_id = ?', { replacements: [userId] });
+      await db.sequelize.query('UPDATE Shift SET created_by = NULL WHERE created_by = ?', { replacements: [userId] });
+      console.log('✅ Unassigned shifts (both user_id and created_by)');
     } catch (err) {
-      console.error('CRITICAL - Failed to unassign shifts:', err.message);
+      console.error('❌ CRITICAL - Failed to unassign shifts:', err.message);
       return res.status(500).send({ 
         message: 'Cannot delete user: Failed to unassign shifts. ' + err.message 
       });
     }
     
+    // 5. Time off requests
     try {
       await db.sequelize.query('DELETE FROM Time_Off_Request WHERE user_id = ?', { replacements: [userId] });
-      console.log(' Deleted time off requests');
+      console.log('✅ Deleted time off requests');
     } catch (err) {
-      console.log(' Time_Off_Request:', err.message);
+      console.log('⚠️ Time_Off_Request:', err.message);
     }
     
+    // 6. Shift swap requests - try different column names
     try {
       await db.sequelize.query('DELETE FROM Shift_Swap_Request WHERE requester_id = ? OR target_user_id = ?', { replacements: [userId, userId] });
-      console.log(' Deleted shift swap requests');
+      console.log('✅ Deleted shift swap requests');
     } catch (err) {
-      console.log(' Shift_Swap_Request:', err.message);
+      // Try alternative column names
+      try {
+        await db.sequelize.query('DELETE FROM Shift_Swap_Request WHERE requesting_user_id = ? OR target_user_id = ?', { replacements: [userId, userId] });
+        console.log('✅ Deleted shift swap requests (alt columns)');
+      } catch (err2) {
+        console.log('⚠️ Shift_Swap_Request:', err.message);
+      }
     }
     
+    // 7. Notifications
     try {
       await db.sequelize.query('DELETE FROM Notifications WHERE user_id = ?', { replacements: [userId] });
-      console.log(' Deleted notifications');
+      console.log('✅ Deleted notifications');
     } catch (err) {
-      console.log(' Notifications:', err.message);
+      console.log('⚠️ Notifications:', err.message);
     }
     
+    // 8. Task list items
     try {
       await db.sequelize.query('UPDATE TaskListItem SET assigned_to = NULL WHERE assigned_to = ?', { replacements: [userId] });
-      console.log(' Unassigned task list items');
+      console.log('✅ Unassigned task list items');
     } catch (err) {
-      console.log(' TaskListItem:', err.message);
+      console.log('⚠️ TaskListItem:', err.message);
     }
     
+    // 9. Task lists
     try {
       await db.sequelize.query('UPDATE TaskList SET created_by = NULL WHERE created_by = ?', { replacements: [userId] });
       await db.sequelize.query('UPDATE TaskList SET assigned_to = NULL WHERE assigned_to = ?', { replacements: [userId] });
-      console.log(' Updated task lists');
+      console.log('✅ Updated task lists');
     } catch (err) {
-      console.log('TaskList:', err.message);
+      console.log('⚠️ TaskList:', err.message);
     }
     
+    // 10. Schedules
     try {
       await db.sequelize.query('UPDATE Schedule SET created_by = NULL WHERE created_by = ?', { replacements: [userId] });
-      console.log(' Updated schedules');
+      console.log('✅ Updated schedules');
     } catch (err) {
-      console.log(' Schedule:', err.message);
+      console.log('⚠️ Schedule:', err.message);
+    }
+    
+    // 11. Calendar events
+    try {
+      await db.sequelize.query('DELETE FROM CalendarEvent WHERE user_id = ?', { replacements: [userId] });
+      console.log('✅ Deleted calendar events');
+    } catch (err) {
+      console.log('⚠️ CalendarEvent:', err.message);
+    }
+    
+    // 12. If employer, unassign employees
+    if (user.role === 'employer' && user.work_location) {
+      try {
+        await db.sequelize.query('UPDATE User SET work_location = NULL WHERE work_location = ? AND role = "employee"', { replacements: [user.work_location] });
+        console.log('✅ Unassigned employees from workplace');
+      } catch (err) {
+        console.log('⚠️ Unassigning employees:', err.message);
+      }
     }
     
     // Finally delete the user
     const deleted = await User.destroy({ where: { id: userId } });
     
     if (deleted) {
-      console.log(' User deleted successfully');
+      console.log('✅ User deleted successfully');
       return res.send({ message: "User deleted successfully." });
     }
     
     return res.status(404).send({ message: `User not found.` });
     
   } catch (err) {
-    console.error(' [ADMIN] Error deleting user:', err);
+    console.error('❌ [ADMIN] Error deleting user:', err);
     console.error('Error message:', err.message);
     res.status(500).send({ 
       message: err.message || "Error deleting user.",

@@ -7,6 +7,7 @@ import { resetDailyTasks } from './app/jobs/dailyTaskReset.js';  // ✅ ADD THIS
 
 const app = express();
 
+// ✅ UPDATED CORS Configuration - Added custom headers
 const corsOptions = {
   origin: [
     "http://localhost:8080",
@@ -17,6 +18,15 @@ const corsOptions = {
     "https://project3.eaglesoftwareteam.com"
   ],
   methods: ['GET', 'POST', 'PUT', 'DELETE', 'PATCH', 'OPTIONS'],
+  allowedHeaders: [
+    "Content-Type", 
+    "Authorization", 
+    "x-requested-with", 
+    "x-demo-mode",
+    "x-user-id",      // ✅ ADDED
+    "x-user-email",   // ✅ ADDED
+    "x-user-role"     // ✅ ADDED
+  ],
   allowedHeaders: ["Content-Type", "Authorization", "x-requested-with", "x-demo-mode"],
   credentials: true,
 };

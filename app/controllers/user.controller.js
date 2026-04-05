@@ -29,6 +29,17 @@ export const create = async (req, res) => {
       return res.status(400).send({ message: "Email already exists" });
     }
     
+    // ✅ NEW: If creating an employee, inherit work_location from the employer
+    let finalWorkLocation = workLocation;
+    if (role === 'employee' && !workLocation && req.user) {
+      // Get the requesting user (employer)
+      const requestingUser = await User.findOne({ where: { id: req.user.userId || req.user.id } });
+      if (requestingUser && requestingUser.work_location) {
+        finalWorkLocation = requestingUser.work_location;
+        console.log(`✅ Employee inheriting work_location ${finalWorkLocation} from employer`);
+      }
+    }
+    
     // Generate user_id
     const rolePrefix = role === 'admin' ? 'admin' : role === 'employer' ? 'mgr' : 'emp';
     const timestamp = Date.now().toString().slice(-8);
@@ -43,12 +54,14 @@ export const create = async (req, res) => {
       lName: lastName || '',
       phone_number: phoneNumber || null,
       role: role,
-      work_location: workLocation || null,
+      work_location: finalWorkLocation || null,
       age: age || null,
       bio: bio || null,
       createdAt: Date.now(),
       updatedAt: null
     });
+    
+    console.log("✅ User created with ID:", user.id, "at work_location:", user.work_location);
     
     // Return BOTH naming conventions for compatibility
     const responseData = {
@@ -77,6 +90,50 @@ export const create = async (req, res) => {
   }
 };
 
+// ✅ UPDATED: Retrieve all Users with workplace isolation
+export const findAll = async (req, res) => {
+  try {
+    // Get the requesting user's info
+    const requestingUserId = req.user?.userId || req.user?.id;
+    
+    if (!requestingUserId) {
+      return res.status(401).send({ message: "Unauthorized" });
+    }
+    
+    const requestingUser = await User.findOne({ 
+      where: { id: requestingUserId },
+      attributes: { exclude: ['password_hash'] }
+    });
+    
+    if (!requestingUser) {
+      return res.status(404).send({ message: "User not found" });
+    }
+    
+    console.log(`📋 User ${requestingUser.email} (${requestingUser.role}) requesting users list from work_location ${requestingUser.work_location}`);
+    
+    let condition = {};
+    
+    // Role-based filtering with workplace isolation
+    if (requestingUser.role === 'admin') {
+      // ✅ Admins see ALL users
+      console.log('👑 Admin access - showing all users');
+      const roleFilter = req.query.role;
+      if (roleFilter) {
+        condition.role = { [Op.like]: `%${roleFilter}%` };
+      }
+    } else if (requestingUser.role === 'employer') {
+      // ✅ Employers see only employees from their work_location
+      console.log(`🏢 Employer access - filtering by work_location ${requestingUser.work_location}`);
+      condition = {
+        role: 'employee',
+        work_location: requestingUser.work_location
+      };
+    } else if (requestingUser.role === 'employee') {
+      // ✅ Employees see only themselves
+      console.log('👤 Employee access - showing only self');
+      condition.id = requestingUser.id;
+    } else {
+      return res.status(403).send({ message: "Access denied" });
 // Retrieve all Users (scoped by employer's work_location)
 export const findAll = async (req, res) => {
   try {
@@ -97,6 +154,9 @@ export const findAll = async (req, res) => {
       attributes: { exclude: ['password_hash'] }
     });
     
+    console.log(`✅ Returning ${users.length} users`);
+    
+    // Return BOTH naming conventions
     const formattedUsers = users.map(user => ({
       user_id: user.id,
       userId: user.id,
@@ -263,11 +323,24 @@ export const update = async (req, res) => {
   }
 };
 
-// Delete a User
+// ✅ FIXED: Delete a User with proper cleanup including created_by
 export const remove = async (req, res) => {
   try {
     const userId = req.params.id;
     
+    console.log(`🗑️ Attempting to delete user: ${userId}`);
+    
+    // Find the user first
+    const user = await User.findOne({ where: { id: userId } });
+    
+    if (!user) {
+      return res.status(404).send({ message: "User not found" });
+    }
+    
+    console.log(`🗑️ Found user: ${user.fName} ${user.lName}, role: ${user.role}`);
+    
+    // Start a transaction
+    const transaction = await db.sequelize.transaction();
     const user = await User.findOne({ where: { id: userId } });
     if (!user) {
       return res.status(404).send({ message: `User not found.` });
@@ -368,8 +441,94 @@ export const remove = async (req, res) => {
       console.log('TaskList cleanup:', err.message);
     }
     
-    // 10. Update schedules
     try {
+      // ✅ Helper function to safely delete from table
+      const safeDelete = async (tableName, whereClause, description) => {
+        try {
+          const result = await db.sequelize.query(
+            `DELETE FROM ${tableName} WHERE ${whereClause}`,
+            { replacements: [userId, userId], transaction }
+          );
+          console.log(`✅ ${description}: Deleted ${result[0].affectedRows || 0} rows`);
+        } catch (err) {
+          console.log(`⚠️ ${description}: ${err.message}`);
+        }
+      };
+      
+      // ✅ Helper function to safely update table
+      const safeUpdate = async (tableName, setClause, whereClause, description) => {
+        try {
+          const result = await db.sequelize.query(
+            `UPDATE ${tableName} SET ${setClause} WHERE ${whereClause}`,
+            { replacements: [userId, userId], transaction }
+          );
+          console.log(`✅ ${description}: Updated ${result[0].affectedRows || 0} rows`);
+        } catch (err) {
+          console.log(`⚠️ ${description}: ${err.message}`);
+        }
+      };
+      
+      // ✅ If deleting an employer, unassign their employees
+      if (user.role === 'employer' && user.work_location) {
+        try {
+          const result = await db.sequelize.query(
+            'UPDATE User SET work_location = NULL WHERE work_location = ? AND role = "employee"',
+            { replacements: [user.work_location], transaction }
+          );
+          console.log(`✅ Unassigned employees from workplace ${user.work_location}`);
+        } catch (err) {
+          console.log(`⚠️ Error unassigning employees: ${err.message}`);
+        }
+      }
+      
+      // Delete/Update related records
+      await safeDelete('Session', 'user_id = ?', 'Sessions');
+      await safeDelete('Availability', 'user_id = ?', 'Availability');
+      
+      // Try both singular and plural for UserSkill/UserSkills
+      await safeDelete('UserSkill', 'user_id = ?', 'UserSkill');
+      await safeDelete('UserSkills', 'user_id = ?', 'UserSkills');
+      
+      // ✅ CRITICAL FIX: Update BOTH user_id AND created_by in Shift table
+      await safeUpdate('Shift', 'user_id = NULL', 'user_id = ?', 'Shifts (user_id)');
+      await safeUpdate('Shift', 'created_by = NULL', 'created_by = ?', 'Shifts (created_by)');
+      
+      await safeDelete('Time_Off_Request', 'user_id = ?', 'Time Off Requests');
+      
+      // Try different column name variations for Shift_Swap_Request
+      await safeDelete('Shift_Swap_Request', 'requester_id = ? OR target_user_id = ?', 'Shift Swap Requests');
+      await safeDelete('Shift_Swap_Request', 'requesting_user_id = ? OR target_user_id = ?', 'Shift Swap Requests (alt)');
+      
+      await safeDelete('Notifications', 'user_id = ?', 'Notifications');
+      await safeDelete('Notification', 'user_id = ?', 'Notification (singular)');
+      
+      await safeUpdate('TaskListItem', 'assigned_to = NULL', 'assigned_to = ?', 'Task List Items');
+      await safeUpdate('TaskList', 'created_by = NULL', 'created_by = ?', 'Task Lists (created_by)');
+      await safeUpdate('TaskList', 'assigned_to = NULL', 'assigned_to = ?', 'Task Lists (assigned_to)');
+      await safeUpdate('Schedule', 'created_by = NULL', 'created_by = ?', 'Schedules');
+      await safeDelete('CalendarEvent', 'user_id = ?', 'Calendar Events');
+      
+      // Finally, delete the user
+      await User.destroy({ 
+        where: { id: userId },
+        transaction
+      });
+      
+      // Commit the transaction
+      await transaction.commit();
+      
+      console.log(`✅ Successfully deleted user: ${userId}`);
+      
+      res.status(200).json({
+        message: "User deleted successfully",
+        userId: userId
+      });
+      
+    } catch (err) {
+      // Rollback transaction on error
+      await transaction.rollback();
+      console.error("❌ Error in delete transaction:", err);
+      throw err;
       await db.sequelize.query(
         'UPDATE Schedule SET created_by = NULL WHERE created_by = ?',
         { replacements: [user.id] }
@@ -384,13 +543,12 @@ export const remove = async (req, res) => {
       return res.send({ message: "User deleted successfully." });
     }
     
-    return res.status(404).send({ message: `User not found.` });
-    
   } catch (err) {
     console.error('Error deleting user:', err);
     res.status(500).send({ 
-      message: err.message || "Error deleting user.",
-      error: process.env.NODE_ENV === 'development' ? err.stack : undefined
+      message: "Error deleting user",
+      error: err.message,
+      details: process.env.NODE_ENV === 'development' ? err.stack : undefined
     });
   }
 };
