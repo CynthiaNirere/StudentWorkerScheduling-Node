@@ -7,14 +7,14 @@ import { resetDailyTasks } from './app/jobs/dailyTaskReset.js';
 
 const app = express();
 
-// ✅ CORRECTED CORS Configuration
+// ✅ FIXED CORS Configuration - removed duplicates
 const corsOptions = {
   origin: [
     "http://localhost:8080",
     "http://localhost:8081",
     "http://localhost:5173",
     "https://workerscheduling.eaglesoftwareteam.com",
-    "https://workerscheduling.eaglesoftwareteam.com:3131",
+    "https://workerscheduling-t1.eaglesoftwareteam.com",
     "https://project3.eaglesoftwareteam.com"
   ],
   methods: ['GET', 'POST', 'PUT', 'DELETE', 'PATCH', 'OPTIONS'],
@@ -26,14 +26,15 @@ const corsOptions = {
     "x-user-id",      
     "x-user-email",   
     "x-user-role"     
-    "x-user-id",
-    "x-user-email",
-    "x-user-role"
   ],
   credentials: true,
+  optionsSuccessStatus: 200
 };
 
 app.use(cors(corsOptions));
+
+// ✅ Add explicit OPTIONS handling
+app.options('*', cors(corsOptions));
 
 // Body Parsers
 app.use(express.json());
