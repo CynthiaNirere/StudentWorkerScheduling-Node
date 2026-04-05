@@ -1,13 +1,13 @@
 import express from "express";
 import cors from "cors";
-import cron from 'node-cron';  // ✅ ADD THIS IMPORT
+import cron from 'node-cron';
 import db from "./app/models/index.js";
 import routes from "./app/routes/index.js";
-import { resetDailyTasks } from './app/jobs/dailyTaskReset.js';  // ✅ ADD THIS IMPORT
+import { resetDailyTasks } from './app/jobs/dailyTaskReset.js';
 
 const app = express();
 
-// ✅ UPDATED CORS Configuration - Added custom headers
+// ✅ CORRECTED CORS Configuration
 const corsOptions = {
   origin: [
     "http://localhost:8080",
@@ -23,11 +23,10 @@ const corsOptions = {
     "Authorization", 
     "x-requested-with", 
     "x-demo-mode",
-    "x-user-id",      // ✅ ADDED
-    "x-user-email",   // ✅ ADDED
-    "x-user-role"     // ✅ ADDED
+    "x-user-id",      
+    "x-user-email",   
+    "x-user-role"     
   ],
-  allowedHeaders: ["Content-Type", "Authorization", "x-requested-with", "x-demo-mode"],
   credentials: true,
 };
 
@@ -64,7 +63,7 @@ app.get("/", (req, res) => {
 app.use("/workerscheduling-t1/api", routes);
 
 // ============================================
-// ✅ CRON JOB SETUP - ADD THIS SECTION HERE
+// CRON JOB SETUP
 // ============================================
 
 console.log("⏰ Setting up daily task reset cron job...");
@@ -78,7 +77,7 @@ cron.schedule('0 0 * * *', async () => {
     console.error('❌ Cron job failed:', err);
   }
 }, {
-  timezone: "America/Chicago"  // Change to your timezone if needed
+  timezone: "America/Chicago"
 });
 
 console.log("✅ Daily task reset cron job scheduled for midnight CST");
@@ -134,7 +133,6 @@ app.use((err, req, res, next) => {
 const PORT = process.env.PORT || 3131;
 
 if (process.env.NODE_ENV !== "test") {
-  // Sync database then start server
   db.sequelize.sync({ alter: false })
     .then(() => {
       console.log("✅ Database synced");
