@@ -27,7 +27,6 @@ const corsOptions = {
     "x-user-email",   // ✅ ADDED
     "x-user-role"     // ✅ ADDED
   ],
-  allowedHeaders: ["Content-Type", "Authorization", "x-requested-with", "x-demo-mode"],
   credentials: true,
 };
 
