@@ -152,6 +152,15 @@ db.message.belongsTo(User, {
   as: 'recipient'
 });
 
+db.message.hasMany(db.message, {
+  foreignKey: 'parentMessageId',
+  as: 'replies'
+});
+db.message.belongsTo(db.message, {
+  foreignKey: 'parentMessageId',
+  as: 'parent'
+});
+
 TaskList.hasMany(TaskListItem, {
   foreignKey: 'tasklistId',
   as: 'items'

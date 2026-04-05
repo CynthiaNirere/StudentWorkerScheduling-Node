@@ -50,6 +50,11 @@ export default (sequelize, Sequelize) => {
       type: Sequelize.BIGINT,
       allowNull: true,
       field: 'read_at'
+    },
+    parentMessageId: {
+      type: Sequelize.INTEGER,
+      allowNull: true,
+      field: 'parent_message_id'
     }
   }, {
     tableName: 'Message',
