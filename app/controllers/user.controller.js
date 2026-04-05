@@ -12,7 +12,7 @@ export const create = async (req, res) => {
     const email = req.body.email;
     const phoneNumber = req.body.phoneNumber || req.body.phone_number;
     const role = req.body.role || 'employee';
-    const workLocation = req.body.workLocation || req.body.work_location || req.workLocation;
+    const workLocation = req.body.workLocation || req.body.work_location;
     const password = req.body.password || req.body.password_hash;
     const age = req.body.age;
     const bio = req.body.bio;
@@ -29,9 +29,9 @@ export const create = async (req, res) => {
       return res.status(400).send({ message: "Email already exists" });
     }
     
+    // ✅ If creating an employee, inherit work_location from the employer
     let finalWorkLocation = workLocation;
     if (role === 'employee' && !workLocation && req.user) {
-      // Get the requesting user (employer)
       const requestingUser = await User.findOne({ where: { id: req.user.userId || req.user.id } });
       if (requestingUser && requestingUser.work_location) {
         finalWorkLocation = requestingUser.work_location;
@@ -82,16 +82,16 @@ export const create = async (req, res) => {
     res.status(201).send(responseData);
     
   } catch (err) {
-    console.error("Error creating user:", err.message);
+    console.error("❌ Error creating user:", err.message);
     res.status(500).send({
       message: err.message || "Error creating user.",
     });
   }
 };
 
+// Retrieve all Users with workplace isolation
 export const findAll = async (req, res) => {
   try {
-    // Get the requesting user's info
     const requestingUserId = req.user?.userId || req.user?.id;
     
     if (!requestingUserId) {
@@ -107,6 +107,13 @@ export const findAll = async (req, res) => {
       return res.status(404).send({ message: "User not found" });
     }
     
+    console.log(`📋 User ${requestingUser.email} (${requestingUser.role}) requesting users list`);
+    
+    let condition = {};
+    
+    // Role-based filtering
+    if (requestingUser.role === 'admin') {
+      console.log('👑 Admin access - showing all users');
     console.log(`User ${requestingUser.email} (${requestingUser.role}) requesting users list from work_location ${requestingUser.work_location}`);
     
     let condition = {};
@@ -118,12 +125,14 @@ export const findAll = async (req, res) => {
         condition.role = { [Op.like]: `%${roleFilter}%` };
       }
     } else if (requestingUser.role === 'employer') {
+      console.log(`🏢 Employer access - filtering by work_location ${requestingUser.work_location}`);
       console.log(`Employer access - filtering by work_location ${requestingUser.work_location}`);
       condition = {
         role: 'employee',
         work_location: requestingUser.work_location
       };
     } else if (requestingUser.role === 'employee') {
+      console.log('👤 Employee access - showing only self');
       console.log('Employee access - showing only self');
       condition.id = requestingUser.id;
     } else {
@@ -137,7 +146,6 @@ export const findAll = async (req, res) => {
     
     console.log(`Returning ${users.length} users`);
     
-    // Return BOTH naming conventions
     const formattedUsers = users.map(user => ({
       user_id: user.id,
       userId: user.id,
@@ -157,7 +165,7 @@ export const findAll = async (req, res) => {
     
     res.send(formattedUsers);
   } catch (err) {
-    console.error("Error retrieving users:", err);
+    console.error("❌ Error retrieving users:", err);
     res.status(500).send({ message: "Error retrieving users." });
   }
 };
@@ -194,7 +202,7 @@ export const findOne = async (req, res) => {
     
     res.send(formattedUser);
   } catch (err) {
-    console.error("Error retrieving user:", err);
+    console.error("❌ Error retrieving user:", err);
     res.status(500).send({ message: "Error retrieving user." });
   }
 };
@@ -231,7 +239,7 @@ export const findByEmail = async (req, res) => {
     
     res.send(formattedUser);
   } catch (err) {
-    console.error("Error retrieving user by email:", err);
+    console.error("❌ Error retrieving user by email:", err);
     res.status(500).send({ message: "Error retrieving user." });
   }
 };
@@ -299,11 +307,12 @@ export const update = async (req, res) => {
       res.status(404).send({ message: `User not found or no data changed.` });
     }
   } catch (err) {
-    console.error("Error updating user:", err);
+    console.error("❌ Error updating user:", err);
     res.status(500).send({ message: "Error updating user." });
   }
 };
 
+// Delete a User with proper cleanup
 export const remove = async (req, res) => {
   try {
     const userId = req.params.id;
@@ -318,6 +327,106 @@ export const remove = async (req, res) => {
     
     console.log(`Found user: ${user.fName} ${user.lName}, role: ${user.role}`);
     
+    // Delete all related records
+    
+    // 1. Sessions
+    try {
+      await db.sequelize.query('DELETE FROM Session WHERE user_id = ?', { replacements: [userId] });
+      console.log('✅ Deleted sessions');
+    } catch (err) {
+      console.log('⚠️ Sessions:', err.message);
+    }
+    
+    // 2. Availability
+    try {
+      await db.sequelize.query('DELETE FROM Availability WHERE user_id = ?', { replacements: [userId] });
+      console.log('✅ Deleted availability');
+    } catch (err) {
+      console.log('⚠️ Availability:', err.message);
+    }
+    
+    // 3. User skills
+    try {
+      await db.sequelize.query('DELETE FROM UserSkill WHERE user_id = ?', { replacements: [userId] });
+      console.log('✅ Deleted user skills');
+    } catch (err) {
+      console.log('⚠️ UserSkill:', err.message);
+    }
+    
+    // 4. Shifts - Update BOTH user_id AND created_by
+    try {
+      await db.sequelize.query('UPDATE Shift SET user_id = NULL WHERE user_id = ?', { replacements: [userId] });
+      await db.sequelize.query('UPDATE Shift SET created_by = NULL WHERE created_by = ?', { replacements: [userId] });
+      console.log('✅ Unassigned shifts');
+    } catch (err) {
+      console.log('⚠️ Shift:', err.message);
+    }
+    
+    // 5. Time off requests
+    try {
+      await db.sequelize.query('DELETE FROM Time_Off_Request WHERE user_id = ?', { replacements: [userId] });
+      console.log('✅ Deleted time off requests');
+    } catch (err) {
+      console.log('⚠️ Time_Off_Request:', err.message);
+    }
+    
+    // 6. Shift swap requests
+    try {
+      await db.sequelize.query('DELETE FROM Shift_Swap_Request WHERE requester_id = ? OR target_user_id = ?', { replacements: [userId, userId] });
+      console.log('✅ Deleted shift swap requests');
+    } catch (err) {
+      console.log('⚠️ Shift_Swap_Request:', err.message);
+    }
+    
+    // 7. Notifications
+    try {
+      await db.sequelize.query('DELETE FROM Notifications WHERE user_id = ?', { replacements: [userId] });
+      console.log('✅ Deleted notifications');
+    } catch (err) {
+      console.log('⚠️ Notifications:', err.message);
+    }
+    
+    // 8. Task list items
+    try {
+      await db.sequelize.query('UPDATE TaskListItem SET assigned_to = NULL WHERE assigned_to = ?', { replacements: [userId] });
+      console.log('✅ Unassigned task list items');
+    } catch (err) {
+      console.log('⚠️ TaskListItem:', err.message);
+    }
+    
+    // 9. Task lists
+    try {
+      await db.sequelize.query('UPDATE TaskList SET created_by = NULL WHERE created_by = ?', { replacements: [userId] });
+      await db.sequelize.query('UPDATE TaskList SET assigned_to = NULL WHERE assigned_to = ?', { replacements: [userId] });
+      console.log('✅ Updated task lists');
+    } catch (err) {
+      console.log('⚠️ TaskList:', err.message);
+    }
+    
+    // 10. Schedules
+    try {
+      await db.sequelize.query('UPDATE Schedule SET created_by = NULL WHERE created_by = ?', { replacements: [userId] });
+      console.log('✅ Updated schedules');
+    } catch (err) {
+      console.log('⚠️ Schedule:', err.message);
+    }
+    
+    // 11. If employer, unassign employees
+    if (user.role === 'employer' && user.work_location) {
+      try {
+        await db.sequelize.query('UPDATE User SET work_location = NULL WHERE work_location = ? AND role = "employee"', { replacements: [user.work_location] });
+        console.log('✅ Unassigned employees from workplace');
+      } catch (err) {
+        console.log('⚠️ Unassigning employees:', err.message);
+      }
+    }
+    
+    // Finally, delete the user
+    const deleted = await User.destroy({ where: { id: userId } });
+    
+    if (deleted) {
+      console.log('✅ User deleted successfully');
+      return res.send({ message: "User deleted successfully." });
     const transaction = await db.sequelize.transaction();
     
     try {
@@ -399,12 +508,13 @@ export const remove = async (req, res) => {
       throw err;
     }
     
+    return res.status(404).send({ message: "User not found." });
+    
   } catch (err) {
-    console.error('Error deleting user:', err);
+    console.error('❌ Error deleting user:', err);
     res.status(500).send({ 
       message: "Error deleting user",
-      error: err.message,
-      details: process.env.NODE_ENV === 'development' ? err.stack : undefined
+      error: err.message
     });
   }
 };

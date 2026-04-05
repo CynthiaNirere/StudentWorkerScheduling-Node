@@ -56,42 +56,65 @@ exports.login = async (req, res) => {
     // ── Find existing user by email ────────────────────────────────────
     let user = await User.findOne({ where: { email } });
 
-    if (user) {
-      console.log("Found existing user:", user.id, "role:", user.role);
-
-      // Update name if changed — but NEVER touch role or work_location
-      const nameChanged = user.fName !== firstName || user.lName !== lastName;
+    // ✅ GUEST USER HANDLING - User not found in database
+    if (!user) {
+      console.log(`👤 GUEST USER detected: ${email}`);
       
-      if (nameChanged) {
-        await User.update(
-          { 
-            fName: firstName, 
-            lName: lastName, 
-            updatedAt: now 
-          },
-          { where: { id: user.id } }  // Use user.id
-        );
-        user.fName = firstName;
-        user.lName = lastName;
-      }
-    } else {
-      // Brand new user — default role is employee
-      const userId = googleSub || crypto.randomUUID();
-      const newUser = {
-        id: userId,  // Use 'id' not 'user_id'
+      // Create session for guest
+      const guestToken = jwt.sign(
+        { email, isGuest: true }, 
+        authconfig.secret, 
+        { expiresIn: 86400 }
+      );
+      const expiresAt = now + 86400 * 1000;
+
+      await Session.create({
+        token: guestToken,
+        userId: null, // No user_id for guests
+        createdAt: now,
+        isActive: 1,
+        expiresAt: expiresAt,
+      });
+
+      console.log("Guest session created for:", email);
+      
+      return res.send({
+        userId: null,
+        user_id: null,
+        email: email,
         fName: firstName,
         lName: lastName,
-        email,
-        role: "employee",
-        createdAt: now,
-      };
-      console.log("Creating new user:", newUser);
-      user = await User.create(newUser);
-      console.log("User registered:", user.id);
+        first_name: firstName,
+        last_name: lastName,
+        role: 'guest', // ✅ GUEST ROLE
+        isGuest: true,
+        work_location: null,
+        token: guestToken,
+        message: "Guest login - not registered in system"
+      });
     }
 
+    // ✅ REGISTERED USER - Update name if changed
+    console.log("Found existing user:", user.id, "role:", user.role);
+
+    const nameChanged = user.fName !== firstName || user.lName !== lastName;
+    
+    if (nameChanged) {
+      await User.update(
+        { 
+          fName: firstName, 
+          lName: lastName, 
+          updatedAt: now 
+        },
+        { where: { id: user.id } }
+      );
+      user.fName = firstName;
+      user.lName = lastName;
+    }
+
+    // Check for existing session
     const existingSession = await Session.findOne({
-      where: { userId: user.id, isActive: 1 },  // Use user.id and camelCase
+      where: { userId: user.id, isActive: 1 },
     });
 
     if (existingSession) {
@@ -107,13 +130,13 @@ exports.login = async (req, res) => {
       }
     }
 
-    // Create new session
+    // Create new session for registered user
     const token = jwt.sign({ id: user.id }, authconfig.secret, { expiresIn: 86400 });
     const expiresAt = now + 86400 * 1000;
 
     await Session.create({
       token,
-      userId: user.id,  // Use camelCase - Sequelize will map to user_id
+      userId: user.id,
       createdAt: now,
       isActive: 1,
       expiresAt: expiresAt,
@@ -121,8 +144,9 @@ exports.login = async (req, res) => {
 
     console.log("New session created for", user.email, "role:", user.role);
     return res.send(buildUserPayload(user, token));
+    
   } catch (err) {
-    console.error("Login error:", err);
+    console.error("❌ Login error:", err);
     return res.status(500).send({ 
       message: err.message || "Error during login",
       error: process.env.NODE_ENV === 'development' ? err.stack : undefined
@@ -133,7 +157,7 @@ exports.login = async (req, res) => {
 // ── Helper: shape the response the frontend stores ─────────────────────────
 function buildUserPayload(user, token) {
   return {
-    userId: user.id,  // Use user.id
+    userId: user.id,
     user_id: user.id,
     email: user.email,
     fName: user.fName,
@@ -141,6 +165,7 @@ function buildUserPayload(user, token) {
     first_name: user.fName,
     last_name: user.lName,
     role: user.role,
+    isGuest: false, // ✅ Regular users are not guests
     work_location: user.work_location,
     token,
   };
@@ -159,13 +184,13 @@ exports.logout = async (req, res) => {
       return res.send({ message: "Already logged out." });
     }
     await Session.update(
-      { isActive: 0 },  // Use camelCase
+      { isActive: 0 },
       { where: { id: session.id } }
     );
     console.log("Logged out successfully");
     return res.send({ message: "Logged out successfully." });
   } catch (err) {
-    console.error("Logout error:", err);
+    console.error("❌ Logout error:", err);
     return res.status(500).send({ message: "Error logging out." });
   }
 };

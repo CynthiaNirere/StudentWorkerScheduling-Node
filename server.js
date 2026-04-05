@@ -7,6 +7,7 @@ import { resetDailyTasks } from './app/jobs/dailyTaskReset.js';
 
 const app = express();
 
+// ✅ CORRECTED CORS Configuration
 const corsOptions = {
   origin: [
     "http://localhost:8080",
@@ -22,6 +23,9 @@ const corsOptions = {
     "Authorization", 
     "x-requested-with", 
     "x-demo-mode",
+    "x-user-id",      
+    "x-user-email",   
+    "x-user-role"     
     "x-user-id",
     "x-user-email",
     "x-user-role"
@@ -62,7 +66,7 @@ app.get("/", (req, res) => {
 app.use("/workerscheduling-t1/api", routes);
 
 // ============================================
-// ✅ CRON JOB SETUP - ADD THIS SECTION HERE
+// CRON JOB SETUP
 // ============================================
 
 console.log("⏰ Setting up daily task reset cron job...");
@@ -76,7 +80,7 @@ cron.schedule('0 0 * * *', async () => {
     console.error('❌ Cron job failed:', err);
   }
 }, {
-  timezone: "America/Chicago"  // Change to your timezone if needed
+  timezone: "America/Chicago"
 });
 
 console.log("✅ Daily task reset cron job scheduled for midnight CST");
@@ -132,7 +136,6 @@ app.use((err, req, res, next) => {
 const PORT = process.env.PORT || 3131;
 
 if (process.env.NODE_ENV !== "test") {
-  // Sync database then start server
   db.sequelize.sync({ alter: false })
     .then(() => {
       console.log("✅ Database synced");
