@@ -26,6 +26,9 @@ const corsOptions = {
     "x-user-id",      
     "x-user-email",   
     "x-user-role"     
+    "x-user-id",
+    "x-user-email",
+    "x-user-role"
   ],
   credentials: true,
 };
