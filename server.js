@@ -1,13 +1,12 @@
 import express from "express";
 import cors from "cors";
-import cron from 'node-cron';  // ✅ ADD THIS IMPORT
+import cron from 'node-cron';
 import db from "./app/models/index.js";
 import routes from "./app/routes/index.js";
-import { resetDailyTasks } from './app/jobs/dailyTaskReset.js';  // ✅ ADD THIS IMPORT
+import { resetDailyTasks } from './app/jobs/dailyTaskReset.js';
 
 const app = express();
 
-// ✅ UPDATED CORS Configuration - Added custom headers
 const corsOptions = {
   origin: [
     "http://localhost:8080",
@@ -23,9 +22,9 @@ const corsOptions = {
     "Authorization", 
     "x-requested-with", 
     "x-demo-mode",
-    "x-user-id",      // ✅ ADDED
-    "x-user-email",   // ✅ ADDED
-    "x-user-role"     // ✅ ADDED
+    "x-user-id",
+    "x-user-email",
+    "x-user-role"
   ],
   credentials: true,
 };
