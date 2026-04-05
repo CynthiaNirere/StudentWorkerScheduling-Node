@@ -42,6 +42,22 @@ const TaskListItem = sequelize.define(
       allowNull: true,
       field: 'order_position'
     },
+    // ✅ NEW FIELDS FOR DAILY TASK ASSIGNMENTS
+    shiftId: {
+      type: DataTypes.INTEGER,
+      allowNull: true,
+      field: 'shift_id'
+    },
+    assignedDate: {
+      type: DataTypes.BIGINT,
+      allowNull: true,
+      field: 'assigned_date'
+    },
+    completedAt: {
+      type: DataTypes.BIGINT,
+      allowNull: true,
+      field: 'completed_at'
+    },
     createdAt: {
       type: DataTypes.BIGINT,
       allowNull: false,

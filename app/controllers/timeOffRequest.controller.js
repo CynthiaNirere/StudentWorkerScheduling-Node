@@ -6,8 +6,6 @@ const { Op } = db.Sequelize;
 // Create and Save a new Time Off Request
 export const create = async (req, res) => {
   try {
-    console.log("Creating time off request with data:", req.body);
-    
     if (!req.body.startDate || !req.body.endDate) {
       return res.status(400).send({ message: "Start date and end date are required!" });
     }
@@ -29,7 +27,6 @@ export const create = async (req, res) => {
       approvedAt: null
     });
     
-    console.log("Time off request created with ID:", request.id);
     res.status(201).send(request);
     
   } catch (err) {
@@ -41,7 +38,7 @@ export const create = async (req, res) => {
   }
 };
 
-// Retrieve all Time Off Requests with optional filters
+// Retrieve all Time Off Requests with optional filters (scoped by employer's work_location)
 export const findAll = async (req, res) => {
   try {
     const { userId, status } = req.query;
@@ -56,15 +53,22 @@ export const findAll = async (req, res) => {
       condition.status = status;
     }
     
+    // Build include with optional workplace scoping
+    const userInclude = {
+      model: db.user,
+      as: 'employee',
+      attributes: ['id', 'fName', 'lName', 'work_location']
+    };
+    
+    // Scope to employer's workplace — admins see all
+    if (req.workLocation && req.userRole !== 'admin') {
+      userInclude.where = { work_location: req.workLocation };
+      userInclude.required = true;
+    }
+    
     const requests = await TimeOffRequest.findAll({
       where: condition,
-      include: [
-        {
-          model: db.user,
-          as: 'employee',
-          attributes: ['id', 'fName', 'lName']
-        }
-      ]
+      include: [userInclude]
     });
 
     const result = requests.map(r => {
@@ -118,8 +122,6 @@ export const remove = async (req, res) => {
   try {
     const id = req.params.id;
     
-    console.log(`Deleting time off request ${id}...`);
-    
     const request = await TimeOffRequest.findByPk(id);
     if (!request) {
       return res.status(404).send({ message: `Time off request not found.` });
@@ -128,7 +130,6 @@ export const remove = async (req, res) => {
     const deleted = await TimeOffRequest.destroy({ where: { id: id } });
     
     if (deleted) {
-      console.log('Time off request deleted successfully');
       return res.send({ message: "Time off request deleted successfully." });
     }
     
@@ -202,11 +203,23 @@ export const deny = async (req, res) => {
   }
 };
 
-// Get all pending time off requests
+// Get all pending time off requests (scoped by employer's work_location)
 export const findPending = async (req, res) => {
   try {
+    const userInclude = {
+      model: db.user,
+      as: 'employee',
+      attributes: ['id', 'fName', 'lName', 'work_location']
+    };
+    
+    if (req.workLocation && req.userRole !== 'admin') {
+      userInclude.where = { work_location: req.workLocation };
+      userInclude.required = true;
+    }
+    
     const requests = await TimeOffRequest.findAll({ 
-      where: { status: 'pending' }
+      where: { status: 'pending' },
+      include: [userInclude]
     });
     res.send(requests);
   } catch (err) {

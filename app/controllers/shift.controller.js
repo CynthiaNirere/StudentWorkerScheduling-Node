@@ -7,9 +7,6 @@ const { Op } = db.Sequelize;
 // Create and Save a new Shift
 export const create = async (req, res) => {
   try {
-    console.log(" Creating shift with data:", req.body);
-    console.log(" User from auth:", req.user);
-    
     // Accept both naming conventions for fields
     const shiftTime = req.body.shiftTime || req.body.shift_time;
     const startTime = req.body.startTime || req.body.start_time;
@@ -24,15 +21,12 @@ export const create = async (req, res) => {
       return res.status(400).send({ message: "Required fields missing!" });
     }
     
-    // FIXED: Get createdBy from multiple possible sources
     let createdBy = 'system';
     if (req.user) {
       createdBy = req.user.userId || req.user.user_id || req.user.id;
     } else if (req.body.createdBy) {
       createdBy = req.body.createdBy;
     }
-    
-    console.log(" Using createdBy:", createdBy);
     
     const shift = await Shift.create({
       shiftTime: shiftTime,
@@ -50,8 +44,6 @@ export const create = async (req, res) => {
       createdAt: Date.now(),
       updatedAt: null
     });
-    
-    console.log(" Shift created with ID:", shift.id);
     
     // Return with both naming conventions
     const responseData = {
@@ -78,7 +70,7 @@ export const create = async (req, res) => {
     res.status(201).send(responseData);
     
   } catch (err) {
-    console.error(" Error creating shift:", err);
+    console.error("Error creating shift:", err);
     res.status(500).send({
       message: err.message || "Error creating shift.",
       error: process.env.NODE_ENV === 'development' ? err.stack : undefined
@@ -86,7 +78,7 @@ export const create = async (req, res) => {
   }
 };
 
-// Retrieve all Shifts with optional filters
+// Retrieve all Shifts with optional filters (scoped by employer's work_location)
 export const findAll = async (req, res) => {
   try {
     const { locationId, location_id, userId, user_id, status, startDate, start, endDate, end } = req.query;
@@ -96,6 +88,9 @@ export const findAll = async (req, res) => {
     // Handle both naming conventions in query params
     if (locationId || location_id) {
       condition.locationId = locationId || location_id;
+    } else if (req.workLocation && req.userRole !== 'admin') {
+      // Scope to employer's workplace if no explicit location filter
+      condition.locationId = req.workLocation;
     }
     
     if (userId || user_id) {
@@ -155,7 +150,7 @@ export const findAll = async (req, res) => {
     
     res.send(formattedShifts);
   } catch (err) {
-    console.error(" Error retrieving shifts:", err);
+    console.error("Error retrieving shifts:", err);
     res.status(500).send({ message: "Error retrieving shifts." });
   }
 };
@@ -270,8 +265,6 @@ export const remove = async (req, res) => {
   try {
     const id = req.params.id;
     
-    console.log(` Deleting shift ${id}...`);
-    
     const shift = await Shift.findByPk(id);
     if (!shift) {
       return res.status(404).send({ message: `Shift not found.` });
@@ -280,14 +273,13 @@ export const remove = async (req, res) => {
     const deleted = await Shift.destroy({ where: { id: id } });
     
     if (deleted) {
-      console.log('Shift deleted successfully');
       return res.send({ message: "Shift deleted successfully." });
     }
     
     return res.status(404).send({ message: `Shift not found.` });
     
   } catch (err) {
-    console.error(' Error deleting shift:', err);
+    console.error('Error deleting shift:', err);
     res.status(500).send({ 
       message: err.message || "Error deleting shift." 
     });
@@ -317,7 +309,7 @@ export const assignUser = async (req, res) => {
     res.send({ message: "User assigned to shift successfully.", shift });
     
   } catch (err) {
-    console.error(' Error assigning user to shift:', err);
+    console.error('Error assigning user to shift:', err);
     res.status(500).send({ 
       message: err.message || "Error assigning user to shift." 
     });
@@ -342,7 +334,7 @@ export const publish = async (req, res) => {
     res.send({ message: "Shift published successfully.", shift });
     
   } catch (err) {
-    console.error(' Error publishing shift:', err);
+    console.error('Error publishing shift:', err);
     res.status(500).send({ 
       message: err.message || "Error publishing shift." 
     });

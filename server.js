@@ -1,7 +1,9 @@
 import express from "express";
 import cors from "cors";
+import cron from 'node-cron';  // ✅ ADD THIS IMPORT
 import db from "./app/models/index.js";
 import routes from "./app/routes/index.js";
+import { resetDailyTasks } from './app/jobs/dailyTaskReset.js';  // ✅ ADD THIS IMPORT
 
 const app = express();
 
@@ -25,6 +27,7 @@ const corsOptions = {
     "x-user-email",   // ✅ ADDED
     "x-user-role"     // ✅ ADDED
   ],
+  allowedHeaders: ["Content-Type", "Authorization", "x-requested-with", "x-demo-mode"],
   credentials: true,
 };
 
@@ -60,6 +63,49 @@ app.get("/", (req, res) => {
 // API Routes - ALL routes from index.js
 app.use("/workerscheduling-t1/api", routes);
 
+// ============================================
+// ✅ CRON JOB SETUP - ADD THIS SECTION HERE
+// ============================================
+
+console.log("⏰ Setting up daily task reset cron job...");
+
+// Run at midnight (00:00) every day - Central Time
+cron.schedule('0 0 * * *', async () => {
+  console.log('\n🕐 Midnight - Running daily task reset...');
+  try {
+    await resetDailyTasks();
+  } catch (err) {
+    console.error('❌ Cron job failed:', err);
+  }
+}, {
+  timezone: "America/Chicago"  // Change to your timezone if needed
+});
+
+console.log("✅ Daily task reset cron job scheduled for midnight CST");
+
+// Manual trigger endpoint for testing
+app.post('/workerscheduling-t1/api/admin/trigger-task-reset', async (req, res) => {
+  try {
+    console.log('🔧 Manual task reset triggered by admin');
+    const result = await resetDailyTasks();
+    res.json({ 
+      success: true, 
+      message: 'Task reset completed successfully',
+      result
+    });
+  } catch (err) {
+    console.error('Manual reset failed:', err);
+    res.status(500).json({ 
+      success: false, 
+      message: err.message 
+    });
+  }
+});
+
+// ============================================
+// END CRON JOB SETUP
+// ============================================
+
 // 404 Handler
 app.use((req, res) => {
   res.status(404).json({
@@ -91,14 +137,15 @@ if (process.env.NODE_ENV !== "test") {
   // Sync database then start server
   db.sequelize.sync({ alter: false })
     .then(() => {
-      console.log("Database synced");
+      console.log("✅ Database synced");
       app.listen(PORT, () => {
         console.log(`✅ Server is running on port ${PORT}`);
         console.log(`📍 API Base: http://localhost:${PORT}/workerscheduling-t1/api`);
+        console.log(`⏰ Cron job active - Daily task reset at midnight CST`);
       });
     })
     .catch(err => {
-      console.error("Database sync failed:", err);
+      console.error("❌ Database sync failed:", err);
     });
 }
 

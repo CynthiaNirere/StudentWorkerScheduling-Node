@@ -7,8 +7,6 @@ const { Op } = db.Sequelize;
 // Create and Save a new Shift Swap Request
 export const create = async (req, res) => {
   try {
-    console.log("Creating shift swap request with data:", req.body);
-    
     if (!req.body.originalShiftId) {
       return res.status(400).send({ message: "Original shift ID is required!" });
     }
@@ -34,7 +32,6 @@ export const create = async (req, res) => {
       });
     }
     
-    console.log("Shift swap request created with ID:", swapRequest.id);
     res.status(201).send(swapRequest);
     
   } catch (err) {
@@ -46,7 +43,7 @@ export const create = async (req, res) => {
   }
 };
 
-// Retrieve all Shift Swap Requests with optional filters
+// Retrieve all Shift Swap Requests with optional filters (scoped by employer's work_location)
 export const findAll = async (req, res) => {
   try {
     const { status } = req.query;
@@ -57,31 +54,41 @@ export const findAll = async (req, res) => {
       condition.status = status;
     }
     
-    const swapRequests = await ShiftSwapRequest.findAll({
-      where: condition,
+    const shiftInclude = {
+      model: db.Shift,
+      as: 'shift',
+      attributes: ['id', 'shiftTime', 'startTime', 'endTime', 'dayOfWeek', 'locationId']
+    };
+    
+    // Build requesting user include with optional workplace scoping
+    const requestingUserInclude = {
+      model: db.user,
+      as: 'requestingUser',
+      attributes: ['id', 'fName', 'lName', 'work_location']
+    };
+    
+    // Scope to employer's workplace — admins see all
+    if (req.workLocation && req.userRole !== 'admin') {
+      requestingUserInclude.where = { work_location: req.workLocation };
+    }
+    
+    const swapUserInclude = {
+      model: ShiftSwapRequestUser,
+      as: 'swapUser',
+      required: req.workLocation && req.userRole !== 'admin' ? true : false,
       include: [
+        requestingUserInclude,
         {
-          model: db.Shift,
-          as: 'shift',
-          attributes: ['id', 'shiftTime', 'startTime', 'endTime', 'dayOfWeek']
-        },
-        {
-          model: ShiftSwapRequestUser,
-          as: 'swapUser',
-          include: [
-            {
-              model: db.user,
-              as: 'requestingUser',
-              attributes: ['id', 'fName', 'lName']
-            },
-            {
-              model: db.user,
-              as: 'acceptingUser',
-              attributes: ['id', 'fName', 'lName']
-            }
-          ]
+          model: db.user,
+          as: 'acceptingUser',
+          attributes: ['id', 'fName', 'lName']
         }
       ]
+    };
+    
+    const swapRequests = await ShiftSwapRequest.findAll({
+      where: condition,
+      include: [shiftInclude, swapUserInclude]
     });
 
     const result = swapRequests.map(swap => {
@@ -137,8 +144,6 @@ export const remove = async (req, res) => {
   try {
     const id = req.params.id;
     
-    console.log(`Deleting shift swap request ${id}...`);
-    
     const swapRequest = await ShiftSwapRequest.findByPk(id);
     if (!swapRequest) {
       return res.status(404).send({ message: `Shift swap request not found.` });
@@ -147,7 +152,6 @@ export const remove = async (req, res) => {
     const deleted = await ShiftSwapRequest.destroy({ where: { id: id } });
     
     if (deleted) {
-      console.log('Shift swap request deleted successfully');
       return res.send({ message: "Shift swap request deleted successfully." });
     }
     
@@ -208,32 +212,34 @@ export const accept = async (req, res) => {
   }
 };
 
-// Approve a Shift Swap Request (manager/admin approves)
+// Approve a Shift Swap Request
+
 export const approve = async (req, res) => {
   try {
     const id = req.params.id;
-    
+
     const swapRequest = await ShiftSwapRequest.findByPk(id);
     if (!swapRequest) {
       return res.status(404).send({ message: `Shift swap request not found.` });
     }
-    
-    if (swapRequest.status !== 'accepted') {
-      return res.status(400).send({ message: "Request must be accepted by another employee first." });
+
+    // ✅ FIX: Allow approval from 'pending' OR 'accepted'
+    if (swapRequest.status !== 'pending' && swapRequest.status !== 'accepted') {
+      return res.status(400).send({ message: "Request has already been processed." });
     }
-    
+
     await swapRequest.update({
       status: 'approved',
-      approvedBy: req.user.id,
+      approvedBy: req.user?.id || req.user?.userId || null,
       approvedAt: Date.now()
     });
-    
+
     res.send({ message: "Shift swap request approved successfully.", swapRequest });
-    
+
   } catch (err) {
     console.error('Error approving shift swap request:', err);
-    res.status(500).send({ 
-      message: err.message || "Error approving shift swap request." 
+    res.status(500).send({
+      message: err.message || "Error approving shift swap request."
     });
   }
 };
@@ -292,11 +298,27 @@ export const cancel = async (req, res) => {
   }
 };
 
-// Get all pending swap requests
+// Get all pending swap requests (scoped by employer's work_location)
 export const findPending = async (req, res) => {
   try {
+    const requestingUserInclude = {
+      model: db.user,
+      as: 'requestingUser',
+      attributes: ['id', 'fName', 'lName', 'work_location']
+    };
+    
+    if (req.workLocation && req.userRole !== 'admin') {
+      requestingUserInclude.where = { work_location: req.workLocation };
+    }
+    
     const swapRequests = await ShiftSwapRequest.findAll({ 
-      where: { status: 'pending' }
+      where: { status: 'pending' },
+      include: [{
+        model: ShiftSwapRequestUser,
+        as: 'swapUser',
+        required: req.workLocation && req.userRole !== 'admin' ? true : false,
+        include: [requestingUserInclude]
+      }]
     });
     res.send(swapRequests);
   } catch (err) {

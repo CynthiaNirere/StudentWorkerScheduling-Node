@@ -6,15 +6,13 @@ const { Op } = db.Sequelize;
 // Create and Save a new User
 export const create = async (req, res) => {
   try {
-    console.log("📝 Creating user with data:", req.body);
-    
     // Accept both naming conventions
     const firstName = req.body.firstName || req.body.first_name || req.body.fName;
     const lastName = req.body.lastName || req.body.last_name || req.body.lName;
     const email = req.body.email;
     const phoneNumber = req.body.phoneNumber || req.body.phone_number;
     const role = req.body.role || 'employee';
-    const workLocation = req.body.workLocation || req.body.work_location;
+    const workLocation = req.body.workLocation || req.body.work_location || req.workLocation;
     const password = req.body.password || req.body.password_hash;
     const age = req.body.age;
     const bio = req.body.bio;
@@ -85,7 +83,7 @@ export const create = async (req, res) => {
     res.status(201).send(responseData);
     
   } catch (err) {
-    console.error("❌ Error creating user:", err.message);
+    console.error("Error creating user:", err.message);
     res.status(500).send({
       message: err.message || "Error creating user.",
     });
@@ -136,6 +134,19 @@ export const findAll = async (req, res) => {
       condition.id = requestingUser.id;
     } else {
       return res.status(403).send({ message: "Access denied" });
+// Retrieve all Users (scoped by employer's work_location)
+export const findAll = async (req, res) => {
+  try {
+    const role = req.query.role;
+    const condition = {};
+
+    if (role) {
+      condition.role = { [Op.like]: `%${role}%` };
+    }
+
+    // Scope to employer's workplace — admins see all
+    if (req.workLocation && req.userRole !== 'admin') {
+      condition.work_location = req.workLocation;
     }
     
     const users = await User.findAll({ 
@@ -165,7 +176,7 @@ export const findAll = async (req, res) => {
     
     res.send(formattedUsers);
   } catch (err) {
-    console.error("❌ Error retrieving users:", err);
+    console.error("Error retrieving users:", err);
     res.status(500).send({ message: "Error retrieving users." });
   }
 };
@@ -202,7 +213,7 @@ export const findOne = async (req, res) => {
     
     res.send(formattedUser);
   } catch (err) {
-    console.error("❌ Error retrieving user:", err);
+    console.error("Error retrieving user:", err);
     res.status(500).send({ message: "Error retrieving user." });
   }
 };
@@ -239,7 +250,7 @@ export const findByEmail = async (req, res) => {
     
     res.send(formattedUser);
   } catch (err) {
-    console.error("❌ Error retrieving user by email:", err);
+    console.error("Error retrieving user by email:", err);
     res.status(500).send({ message: "Error retrieving user." });
   }
 };
@@ -251,7 +262,6 @@ export const update = async (req, res) => {
     
     const updateData = {};
     
-    // Accept both naming conventions
     if (req.body.firstName || req.body.first_name || req.body.fName) {
       updateData.fName = req.body.firstName || req.body.first_name || req.body.fName;
     }
@@ -308,7 +318,7 @@ export const update = async (req, res) => {
       res.status(404).send({ message: `User not found or no data changed.` });
     }
   } catch (err) {
-    console.error("❌ Error updating user:", err);
+    console.error("Error updating user:", err);
     res.status(500).send({ message: "Error updating user." });
   }
 };
@@ -331,6 +341,105 @@ export const remove = async (req, res) => {
     
     // Start a transaction
     const transaction = await db.sequelize.transaction();
+    const user = await User.findOne({ where: { id: userId } });
+    if (!user) {
+      return res.status(404).send({ message: `User not found.` });
+    }
+    
+    // Delete all related records using raw SQL queries to avoid FK constraint errors
+    
+    // 1. Delete sessions
+    try {
+      await db.sequelize.query(
+        'DELETE FROM Session WHERE user_id = ?',
+        { replacements: [user.id] }
+      );
+    } catch (err) {
+      console.log('Sessions cleanup:', err.message);
+    }
+    
+    try {
+      await db.sequelize.query(
+        'DELETE FROM Availability WHERE user_id = ?',
+        { replacements: [user.id] }
+      );
+    } catch (err) {
+      console.log('Availability cleanup:', err.message);
+    }
+    
+    // 3. Delete user skills
+    try {
+      await db.sequelize.query(
+        'DELETE FROM UserSkill WHERE user_id = ?',
+        { replacements: [user.id] }
+      );
+    } catch (err) {
+      console.log('UserSkill cleanup:', err.message);
+    }
+    
+    // 4. Update shifts (set user_id to NULL)
+    try {
+      await db.sequelize.query(
+        'UPDATE Shift SET user_id = NULL WHERE user_id = ?',
+        { replacements: [user.id] }
+      );
+    } catch (err) {
+      console.log('Shift cleanup:', err.message);
+    }
+    
+    // 5. Delete time off requests
+    try {
+      await db.sequelize.query(
+        'DELETE FROM Time_Off_Request WHERE user_id = ?',
+        { replacements: [user.id] }
+      );
+    } catch (err) {
+      console.log('Time_Off_Request cleanup:', err.message);
+    }
+    
+    // 6. Delete shift swap requests
+    try {
+      await db.sequelize.query(
+        'DELETE FROM Shift_Swap_Request WHERE requester_id = ? OR target_user_id = ?',
+        { replacements: [user.id, user.id] }
+      );
+    } catch (err) {
+      console.log('Shift_Swap_Request cleanup:', err.message);
+    }
+    
+    // 7. Delete notifications
+    try {
+      await db.sequelize.query(
+        'DELETE FROM Notifications WHERE user_id = ?',
+        { replacements: [user.id] }
+      );
+    } catch (err) {
+      console.log('Notifications cleanup:', err.message);
+    }
+    
+    // 8. Update task list items (set assigned_to to NULL)
+    try {
+      await db.sequelize.query(
+        'UPDATE TaskListItem SET assigned_to = NULL WHERE assigned_to = ?',
+        { replacements: [user.id] }
+      );
+    } catch (err) {
+      console.log('TaskListItem cleanup:', err.message);
+    }
+    
+    // 9. Update task lists
+    try {
+      await db.sequelize.query(
+        'UPDATE TaskList SET created_by = NULL WHERE created_by = ?',
+        { replacements: [user.id] }
+      );
+      await db.sequelize.query(
+        'UPDATE TaskList SET assigned_to = NULL WHERE assigned_to = ?',
+        { replacements: [user.id] }
+      );
+    } catch (err) {
+      console.log('TaskList cleanup:', err.message);
+    }
     
     try {
       // ✅ Helper function to safely delete from table
@@ -420,10 +529,22 @@ export const remove = async (req, res) => {
       await transaction.rollback();
       console.error("❌ Error in delete transaction:", err);
       throw err;
+      await db.sequelize.query(
+        'UPDATE Schedule SET created_by = NULL WHERE created_by = ?',
+        { replacements: [user.id] }
+      );
+    } catch (err) {
+      console.log('Schedule cleanup:', err.message);
+    }
+ 
+    const deleted = await User.destroy({ where: { id: userId } });
+    
+    if (deleted) {
+      return res.send({ message: "User deleted successfully." });
     }
     
   } catch (err) {
-    console.error('❌ Error deleting user:', err);
+    console.error('Error deleting user:', err);
     res.status(500).send({ 
       message: "Error deleting user",
       error: err.message,
