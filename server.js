@@ -5,7 +5,7 @@ import routes from "./app/routes/index.js";
 
 const app = express();
 
-
+// ✅ UPDATED CORS Configuration - Added custom headers
 const corsOptions = {
   origin: [
     "http://localhost:8080",
@@ -13,32 +13,34 @@ const corsOptions = {
     "http://localhost:5173",
     "https://workerscheduling.eaglesoftwareteam.com",
     "https://workerscheduling.eaglesoftwareteam.com:3131",
-    "https://project3.eaglesoftwareteam.com"  // ✅ Added back from earlier
+    "https://project3.eaglesoftwareteam.com"
   ],
   methods: ['GET', 'POST', 'PUT', 'DELETE', 'PATCH', 'OPTIONS'],
-  allowedHeaders: ["Content-Type", "Authorization", "x-requested-with", "x-demo-mode"],  // ✅ ADDED x-demo-mode
+  allowedHeaders: [
+    "Content-Type", 
+    "Authorization", 
+    "x-requested-with", 
+    "x-demo-mode",
+    "x-user-id",      // ✅ ADDED
+    "x-user-email",   // ✅ ADDED
+    "x-user-role"     // ✅ ADDED
+  ],
   credentials: true,
 };
 
 app.use(cors(corsOptions));
 
-
 // Body Parsers
-
 app.use(express.json());
 app.use(express.urlencoded({ extended: true }));
 
-
 // Request Logging Middleware
-
 app.use((req, res, next) => {
   console.log(`${req.method} ${req.path}`);
   next();
 });
 
-
 // ROOT ROUTE - API Health Check
-
 app.get("/", (req, res) => {
   res.json({ 
     message: "Worker Scheduling API is running!",
@@ -55,13 +57,10 @@ app.get("/", (req, res) => {
   });
 });
 
-
 // API Routes - ALL routes from index.js
-
 app.use("/workerscheduling-t1/api", routes);
 
 // 404 Handler
-
 app.use((req, res) => {
   res.status(404).json({
     message: "Route not found",
@@ -77,7 +76,6 @@ app.use((req, res) => {
 });
 
 // Error Handler
-
 app.use((err, req, res, next) => {
   console.error("❌ Server Error:", err);
   res.status(err.status || 500).json({
@@ -87,7 +85,6 @@ app.use((err, req, res, next) => {
 });
 
 // Database Sync & Server Start
-
 const PORT = process.env.PORT || 3131;
 
 if (process.env.NODE_ENV !== "test") {
