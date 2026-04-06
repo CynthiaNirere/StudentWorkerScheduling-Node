@@ -135,7 +135,7 @@ export const findAll = async (req, res) => {
     })));
 
   } catch (err) {
-    console.error("Error retrieving users:", err);
+    console.error("❌ Error retrieving users:", err);
     res.status(500).send({ message: "Error retrieving users." });
   }
 };
@@ -166,7 +166,7 @@ export const findOne = async (req, res) => {
       updated_at:    user.updatedAt,
     });
   } catch (err) {
-    console.error("Error retrieving user:", err);
+    console.error("❌ Error retrieving user:", err);
     res.status(500).send({ message: "Error retrieving user." });
   }
 };
@@ -197,7 +197,7 @@ export const findByEmail = async (req, res) => {
       updated_at:    user.updatedAt,
     });
   } catch (err) {
-    console.error("Error retrieving user by email:", err);
+    console.error("❌ Error retrieving user by email:", err);
     res.status(500).send({ message: "Error retrieving user." });
   }
 };
@@ -251,7 +251,7 @@ export const update = async (req, res) => {
       },
     });
   } catch (err) {
-    console.error("Error updating user:", err);
+    console.error("❌ Error updating user:", err);
     res.status(500).send({ message: "Error updating user." });
   }
 };

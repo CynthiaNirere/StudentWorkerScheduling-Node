@@ -183,7 +183,7 @@ exports.logout = async (req, res) => {
     await Session.update({ isActive: 0 }, { where: { id: session.id } });
     return res.send({ message: "Logged out successfully." });
   } catch (err) {
-    console.error("Logout error:", err);
+    console.error("❌ Logout error:", err);
     return res.status(500).send({ message: "Error logging out." });
   }
 };

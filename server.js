@@ -13,7 +13,7 @@ const corsOptions = {
     "http://localhost:8081",
     "http://localhost:5173",
     "https://workerscheduling.eaglesoftwareteam.com",
-    "https://workerscheduling.eaglesoftwareteam.com:3131",
+    "https://workerscheduling-t1.eaglesoftwareteam.com",
     "https://project3.eaglesoftwareteam.com"
   ],
   methods: ['GET', 'POST', 'PUT', 'DELETE', 'PATCH', 'OPTIONS'],
@@ -27,6 +27,7 @@ const corsOptions = {
     "x-user-role"
   ],
   credentials: true,
+  optionsSuccessStatus: 200
 };
 
 app.use(cors(corsOptions));
