@@ -1,462 +1,270 @@
 import db from "../models/index.js";
 
 const Message = db.message;
-const User = db.user;
-const { Op } = db.Sequelize;
 
-// Send a message (direct or broadcast)
+const getSenderId = (req) => req.user?.userId || req.user?.user_id || req.user?.id;
+
+// ── SEND ──────────────────────────────────────────────────────────────────
 export const send = async (req, res) => {
   try {
-    const { recipientId, subject, message, messageType, linkUrl, parentMessageId } = req.body;
-    
-    if (!message) {
-      return res.status(400).send({ message: "Message content is required!" });
-    }
-    
-    const senderId = req.user?.userId || req.user?.user_id || req.user?.id;
-    
-    // Validate message type
-    const validTypes = ['direct', 'broadcast', 'link_share'];
-    const type = messageType || 'direct';
-    
-    if (!validTypes.includes(type)) {
+    const { recipientId, subject, message, messageType, linkUrl, thread_id } = req.body;
+
+    if (!message) return res.status(400).send({ message: "Message content is required!" });
+
+    const senderId = getSenderId(req);
+    const type     = messageType || 'direct';
+
+    if (!['direct','broadcast','link_share'].includes(type))
       return res.status(400).send({ message: "Invalid message type!" });
+
+    let resolvedRecipientId = null;
+
+    if (type === 'direct') {
+      if (recipientId) {
+        resolvedRecipientId = Array.isArray(recipientId) ? recipientId[0] : recipientId;
+      } else {
+        // Auto-route null recipient to manager at sender's work_location
+        const [sender] = await db.sequelize.query(
+          'SELECT work_location FROM User WHERE user_id = ?',
+          { replacements: [senderId], type: db.Sequelize.QueryTypes.SELECT }
+        );
+        if (sender?.work_location) {
+          const [manager] = await db.sequelize.query(
+            'SELECT user_id FROM User WHERE work_location = ? AND role = "employer" LIMIT 1',
+            { replacements: [sender.work_location], type: db.Sequelize.QueryTypes.SELECT }
+          );
+          if (manager) resolvedRecipientId = manager.user_id;
+        }
+      }
     }
-    
-    // For direct messages, recipient is required
-    if (type === 'direct' && !recipientId) {
-      return res.status(400).send({ message: "Recipient ID is required for direct messages!" });
-    }
-    
-    // Support single recipientId (string) or multiple (array)
+
     const recipientIds = type === 'broadcast'
       ? [null]
-      : Array.isArray(recipientId) ? recipientId : [recipientId];
-    
-    const now = Date.now();
-    const messagesToCreate = recipientIds.map(rid => ({
-      senderId,
-      recipientId: rid,
-      subject: subject || null,
-      message,
-      messageType: type,
-      linkUrl: linkUrl || null,
-      isRead: false,
-      createdAt: now,
-      readAt: null,
-      parentMessageId: parentMessageId || null
-    }));
-    
-    const newMessages = await Message.bulkCreate(messagesToCreate);
-    
+      : Array.isArray(recipientId) && recipientId.length > 1
+        ? recipientId
+        : [resolvedRecipientId];
+
+    const now      = Date.now();
+    const threadId = thread_id || `${type}-${senderId}-${resolvedRecipientId || 'all'}-${now}`;
+
+    const created = await Message.bulkCreate(
+      recipientIds.map(rid => ({
+        senderId,
+        recipientId:  type === 'broadcast' ? null : rid,
+        subject:      subject || null,
+        message,
+        messageType:  type,
+        linkUrl:      linkUrl || null,
+        threadId,
+        isRead:       false,
+        createdAt:    now,
+        readAt:       null,
+      }))
+    );
+
     res.status(201).send({
-      message: `Message sent to ${newMessages.length} recipient(s) successfully!`,
-      data: newMessages
+      message:  `Message sent to ${created.length} recipient(s) successfully!`,
+      data:     created,
+      threadId,
     });
-    
   } catch (err) {
     console.error("Error sending message:", err);
     res.status(500).send({ message: "Error sending message." });
   }
 };
 
-// Get all messages for current user (inbox)
+// ── INBOX ─────────────────────────────────────────────────────────────────
+// ✅ FIX: broadcasts are excluded if the current user is the sender
+// — they see it in Sent, not duplicated in Inbox
 export const getInbox = async (req, res) => {
   try {
-    const userId = req.user?.userId || req.user?.user_id || req.user?.id;
-    
-    const messages = await Message.findAll({
-      where: {
-        [Op.and]: [
-          { parentMessageId: null },
-          {
-            [Op.or]: [
-              { recipientId: userId },
-              { senderId: userId },
-              { recipientId: null, messageType: 'broadcast' }
-            ]
-          }
-        ]
-      },
-      include: [
-        {
-          model: User,
-          as: 'sender',
-          attributes: ['id', 'fName', 'lName', 'email']
-        },
-        {
-          model: Message,
-          as: 'replies',
-          attributes: ['message_id', 'isRead', 'recipientId']
-        }
-      ],
-      order: [['createdAt', 'DESC']]
-    });
-    
-    // Filter: show messages sent TO user always; messages FROM user only if they have replies
-    const filtered = messages.filter(msg => {
-      if (msg.recipientId === userId || (msg.recipientId === null && msg.messageType === 'broadcast')) return true;
-      if (msg.senderId === userId && msg.replies && msg.replies.length > 0) return true;
-      return false;
+    const userId = getSenderId(req);
+
+    const messages = await db.sequelize.query(`
+      SELECT
+        m.message_id,
+        m.sender_id,
+        m.recipient_id,
+        m.subject,
+        m.message,
+        m.message_type,
+        m.link_url,
+        m.thread_id,
+        m.is_read,
+        m.created_at,
+        m.read_at,
+        CONCAT(u.first_name, ' ', u.last_name) AS sender_name,
+        u.email AS sender_email
+      FROM Message m
+      LEFT JOIN User u ON m.sender_id = u.user_id
+      WHERE
+        -- Direct messages addressed to this user
+        m.recipient_id = ?
+        OR
+        -- Broadcasts sent by someone else (not this user's own broadcasts)
+        (m.recipient_id IS NULL AND m.message_type = 'broadcast' AND m.sender_id != ?)
+      ORDER BY m.created_at DESC
+    `, {
+      replacements: [userId, userId],
+      type: db.Sequelize.QueryTypes.SELECT,
     });
 
-    const formattedMessages = filtered.map(msg => {
-      const unreadReplies = msg.replies ? msg.replies.filter(r => 
-        !r.isRead && (r.recipientId === userId || r.recipientId === null)
-      ).length : 0;
-      return {
-        message_id: msg.message_id,
-        sender_id: msg.senderId,
-        sender_name: msg.sender ? `${msg.sender.fName} ${msg.sender.lName}` : 'Unknown',
-        sender_email: msg.sender ? msg.sender.email : null,
-        recipient_id: msg.recipientId,
-        subject: msg.subject,
-        message: msg.message,
-        message_type: msg.messageType,
-        link_url: msg.linkUrl,
-        is_read: msg.isRead,
-        created_at: msg.createdAt,
-        read_at: msg.readAt,
-        reply_count: msg.replies ? msg.replies.length : 0,
-        unread_replies: unreadReplies,
-        has_new_activity: !msg.isRead || unreadReplies > 0
-      };
-    });
-    
-    res.send(formattedMessages);
-    
+    res.send(messages);
   } catch (err) {
     console.error("Error retrieving inbox:", err);
     res.status(500).send({ message: "Error retrieving inbox." });
   }
 };
 
-// Get sent messages
+// ── SENT MESSAGES ─────────────────────────────────────────────────────────
 export const getSentMessages = async (req, res) => {
   try {
-    const userId = req.user?.userId || req.user?.user_id || req.user?.id;
-    
-    const messages = await Message.findAll({
-      where: { senderId: userId },
-      include: [{
-        model: User,
-        as: 'recipient',
-        attributes: ['id', 'fName', 'lName', 'email'],
-        required: false
-      }],
-      order: [['createdAt', 'DESC']]
+    const userId = getSenderId(req);
+
+    const messages = await db.sequelize.query(`
+      SELECT
+        m.message_id,
+        m.sender_id,
+        m.recipient_id,
+        m.subject,
+        m.message,
+        m.message_type,
+        m.link_url,
+        m.thread_id,
+        m.is_read,
+        m.created_at,
+        m.read_at,
+        CONCAT(r.first_name, ' ', r.last_name) AS recipient_name,
+        r.email AS recipient_email
+      FROM Message m
+      LEFT JOIN User r ON m.recipient_id = r.user_id
+      WHERE m.sender_id = ?
+      ORDER BY m.created_at DESC
+    `, {
+      replacements: [userId],
+      type: db.Sequelize.QueryTypes.SELECT,
     });
-    
-    // Group messages sent at the same time (multi-recipient) into one entry
-    const groupMap = new Map();
+
+    // Group by thread_id so multi-recipient sends appear as one entry
+    const grouped = new Map();
     for (const msg of messages) {
-      const groupKey = `${msg.createdAt}_${msg.subject}_${msg.messageType}`;
-      if (groupMap.has(groupKey)) {
-        const group = groupMap.get(groupKey);
-        if (msg.recipient) {
-          group.recipients.push(`${msg.recipient.fName} ${msg.recipient.lName}`);
-          group.recipient_ids.push(msg.recipientId);
-        }
-        group.message_ids.push(msg.message_id);
-      } else {
-        groupMap.set(groupKey, {
-          message_id: msg.message_id,
-          message_ids: [msg.message_id],
-          recipient_ids: msg.recipientId ? [msg.recipientId] : [],
-          recipients: msg.recipient ? [`${msg.recipient.fName} ${msg.recipient.lName}`] : [],
-          subject: msg.subject,
-          message: msg.message,
-          message_type: msg.messageType,
-          link_url: msg.linkUrl,
-          is_read: msg.isRead,
-          created_at: msg.createdAt,
-          read_at: msg.readAt
+      const key = msg.thread_id || `${msg.created_at}-${msg.subject}`;
+      if (!grouped.has(key)) {
+        grouped.set(key, {
+          message_id:    msg.message_id,
+          thread_id:     key,
+          sender_id:     msg.sender_id,
+          subject:       msg.subject,
+          message:       msg.message,
+          message_type:  msg.message_type,
+          link_url:      msg.link_url,
+          is_read:       msg.is_read,
+          created_at:    msg.created_at,
+          recipients:    [],
+          recipient_ids: [],
         });
       }
+      const g = grouped.get(key);
+      if (msg.recipient_name) g.recipients.push(msg.recipient_name);
+      if (msg.recipient_id)   g.recipient_ids.push(msg.recipient_id);
     }
 
-    const formattedMessages = Array.from(groupMap.values()).map(group => ({
-      ...group,
-      recipient_name: group.message_type === 'broadcast'
-        ? 'All Employees'
-        : group.recipients.join(', ')
+    const result = [...grouped.values()].map(g => ({
+      ...g,
+      recipient_name: g.message_type === 'broadcast' ? 'All Employees' : g.recipients.join(', '),
     }));
-    
-    res.send(formattedMessages);
-    
+
+    res.send(result);
   } catch (err) {
     console.error("Error retrieving sent messages:", err);
     res.status(500).send({ message: "Error retrieving sent messages." });
   }
 };
 
-// Mark message as read
+// ── MARK AS READ ──────────────────────────────────────────────────────────
 export const markAsRead = async (req, res) => {
   try {
-    const messageId = req.params.id;
-    
     const [updated] = await Message.update(
       { isRead: true, readAt: Date.now() },
-      { where: { message_id: messageId } }
+      { where: { message_id: req.params.id } }
     );
-    
-    if (updated === 1) {
-      res.send({ message: "Message marked as read." });
-    } else {
-      res.status(404).send({ message: "Message not found." });
-    }
-    
+    if (updated === 1) res.send({ message: "Message marked as read." });
+    else res.status(404).send({ message: "Message not found." });
   } catch (err) {
     console.error("Error marking message as read:", err);
     res.status(500).send({ message: "Error marking message as read." });
   }
 };
 
-// Delete message
+// ── DELETE ────────────────────────────────────────────────────────────────
 export const remove = async (req, res) => {
   try {
-    const messageId = req.params.id;
-    
-    const deleted = await Message.destroy({
-      where: { message_id: messageId }
-    });
-    
-    if (deleted) {
-      res.send({ message: "Message deleted successfully!" });
-    } else {
-      res.status(404).send({ message: "Message not found!" });
-    }
-    
+    const deleted = await Message.destroy({ where: { message_id: req.params.id } });
+    if (deleted) res.send({ message: "Message deleted successfully!" });
+    else res.status(404).send({ message: "Message not found!" });
   } catch (err) {
     console.error("Error deleting message:", err);
     res.status(500).send({ message: "Error deleting message." });
   }
 };
 
-// Get unread count
+// ── UNREAD COUNT ──────────────────────────────────────────────────────────
 export const getUnreadCount = async (req, res) => {
   try {
-    const userId = req.user?.userId || req.user?.user_id || req.user?.id;
-    
-    const count = await Message.count({
-      where: {
-        [Op.or]: [
-          { recipientId: userId },
-          { recipientId: null, messageType: 'broadcast', senderId: { [Op.ne]: userId } }
-        ],
-        isRead: false
-      }
+    const userId = getSenderId(req);
+
+    const [result] = await db.sequelize.query(`
+      SELECT COUNT(*) AS unreadCount
+      FROM Message
+      WHERE (
+        recipient_id = ?
+        OR (recipient_id IS NULL AND message_type = 'broadcast' AND sender_id != ?)
+      )
+      AND is_read = 0
+    `, {
+      replacements: [userId, userId],
+      type: db.Sequelize.QueryTypes.SELECT,
     });
-    
-    res.send({ unreadCount: count });
-    
+
+    res.send({ unreadCount: Number(result.unreadCount) });
   } catch (err) {
     console.error("Error getting unread count:", err);
     res.status(500).send({ message: "Error getting unread count." });
   }
 };
 
-// Get thread (original message + all replies)
-export const getThread = async (req, res) => {
-  try {
-    const messageId = req.params.id;
-    const userId = req.user?.userId || req.user?.user_id || req.user?.id;
-    
-    const original = await Message.findByPk(messageId, {
-      include: [{
-        model: User,
-        as: 'sender',
-        attributes: ['id', 'fName', 'lName', 'email']
-      }]
-    });
-    
-    if (!original) {
-      return res.status(404).send({ message: 'Message not found.' });
-    }
-
-    // Mark the original as read if addressed to current user (or broadcast not sent by us)
-    if (!original.isRead && (
-      original.recipientId === userId ||
-      (original.messageType === 'broadcast' && original.senderId !== userId)
-    )) {
-      await original.update({ isRead: true, readAt: Date.now() });
-    }
-    
-    const replies = await Message.findAll({
-      where: { parentMessageId: messageId },
-      include: [{
-        model: User,
-        as: 'sender',
-        attributes: ['id', 'fName', 'lName', 'email']
-      }],
-      order: [['createdAt', 'ASC']]
-    });
-
-    // Mark all unread replies addressed to the current user as read
-    const unreadReplyIds = replies
-      .filter(r => !r.isRead && (r.recipientId === userId || (r.recipientId === null && r.senderId !== userId)))
-      .map(r => r.message_id);
-    if (unreadReplyIds.length > 0) {
-      await Message.update(
-        { isRead: true, readAt: Date.now() },
-        { where: { message_id: unreadReplyIds } }
-      );
-    }
-    
-    const format = (msg) => ({
-      message_id: msg.message_id,
-      sender_id: msg.senderId,
-      sender_name: msg.sender ? `${msg.sender.fName} ${msg.sender.lName}` : 'Unknown',
-      recipient_id: msg.recipientId,
-      subject: msg.subject,
-      message: msg.message,
-      message_type: msg.messageType,
-      is_read: msg.isRead,
-      created_at: msg.createdAt,
-      parent_message_id: msg.parentMessageId
-    });
-    
-    res.send({
-      original: format(original),
-      replies: replies.map(format)
-    });
-    
-  } catch (err) {
-    console.error('Error retrieving thread:', err);
-    res.status(500).send({ message: 'Error retrieving thread.' });
-  }
-};
-
-// Get all conversations for current user (chat-style)
-export const getConversations = async (req, res) => {
-  try {
-    const userId = req.user?.userId || req.user?.user_id || req.user?.id;
-
-    const threads = await Message.findAll({
-      where: {
-        parentMessageId: null,
-        [Op.or]: [
-          { recipientId: userId },
-          { senderId: userId },
-          { recipientId: null, messageType: 'broadcast' }
-        ]
-      },
-      include: [
-        { model: User, as: 'sender', attributes: ['id', 'fName', 'lName', 'email', 'role'] },
-        { model: User, as: 'recipient', attributes: ['id', 'fName', 'lName', 'email', 'role'] },
-        {
-          model: Message,
-          as: 'replies',
-          attributes: ['message_id', 'isRead', 'recipientId', 'senderId', 'message', 'createdAt'],
-          include: [{ model: User, as: 'sender', attributes: ['id', 'fName', 'lName'] }]
-        }
-      ],
-      order: [['createdAt', 'DESC']]
-    });
-
-    const conversations = threads.map(thread => {
-      const allMessages = [
-        { message: thread.message, createdAt: thread.createdAt, sender: thread.sender, senderId: thread.senderId },
-        ...(thread.replies || [])
-      ];
-      const lastMsg = allMessages.reduce((latest, m) =>
-        (Number(m.createdAt) > Number(latest.createdAt)) ? m : latest
-      , allMessages[0]);
-
-      // Count unread messages addressed to current user in this thread
-      const parentUnread = (!thread.isRead && thread.recipientId === userId) ? 1 : 0;
-      const replyUnread = thread.replies ? thread.replies.filter(r =>
-        !r.isRead && r.recipientId === userId
-      ).length : 0;
-
-      // Determine the "other person" in the conversation
-      let otherPerson;
-      if (thread.messageType === 'broadcast') {
-        otherPerson = {
-          id: thread.senderId,
-          name: thread.sender ? `${thread.sender.fName} ${thread.sender.lName}` : 'Unknown',
-          initials: thread.sender ? `${thread.sender.fName?.[0] || ''}${thread.sender.lName?.[0] || ''}` : '?',
-          role: thread.sender?.role || null
-        };
-      } else if (thread.senderId === userId) {
-        otherPerson = {
-          id: thread.recipientId,
-          name: thread.recipient ? `${thread.recipient.fName} ${thread.recipient.lName}` : 'Unknown',
-          initials: thread.recipient ? `${thread.recipient.fName?.[0] || ''}${thread.recipient.lName?.[0] || ''}` : '?',
-          role: thread.recipient?.role || null
-        };
-      } else {
-        otherPerson = {
-          id: thread.senderId,
-          name: thread.sender ? `${thread.sender.fName} ${thread.sender.lName}` : 'Unknown',
-          initials: thread.sender ? `${thread.sender.fName?.[0] || ''}${thread.sender.lName?.[0] || ''}` : '?',
-          role: thread.sender?.role || null
-        };
-      }
-
-      const lastSenderName = lastMsg.sender
-        ? `${lastMsg.sender.fName} ${lastMsg.sender.lName}`
-        : 'Unknown';
-
-      return {
-        thread_id: thread.message_id,
-        subject: thread.subject,
-        message_type: thread.messageType,
-        other_person: otherPerson,
-        last_message: lastMsg.message,
-        last_message_time: lastMsg.createdAt,
-        last_sender_id: lastMsg.senderId,
-        last_sender_name: lastSenderName,
-        total_messages: allMessages.length,
-        unread_count: parentUnread + replyUnread,
-        created_at: thread.createdAt
-      };
-    });
-
-    // Sort by last message time (most recent first)
-    conversations.sort((a, b) => Number(b.last_message_time || 0) - Number(a.last_message_time || 0));
-
-    res.send(conversations);
-  } catch (err) {
-    console.error("Error retrieving conversations:", err);
-    res.status(500).send({ message: "Error retrieving conversations." });
-  }
-};
-
-// Broadcast message to all employees
+// ── BROADCAST ─────────────────────────────────────────────────────────────
 export const broadcast = async (req, res) => {
   try {
     const { subject, message, linkUrl } = req.body;
-    
-    if (!message) {
-      return res.status(400).send({ message: "Message content is required!" });
-    }
-    
-    const senderId = req.user?.userId || req.user?.user_id || req.user?.id;
-    
-    const broadcastMessage = await Message.create({
+    if (!message) return res.status(400).send({ message: "Message content is required!" });
+
+    const senderId = getSenderId(req);
+    const now      = Date.now();
+
+    const msg = await Message.create({
       senderId,
-      recipientId: null,
-      subject: subject || "Announcement",
+      recipientId:  null,
+      subject:      subject || "Announcement",
       message,
-      messageType: 'broadcast',
-      linkUrl: linkUrl || null,
-      isRead: false,
-      createdAt: Date.now(),
-      readAt: null
+      messageType:  'broadcast',
+      linkUrl:      linkUrl || null,
+      threadId:     `broadcast-${senderId}-${now}`,
+      isRead:       false,
+      createdAt:    now,
+      readAt:       null,
     });
-    
-    // Count how many employees will receive it
-    const employeeCount = await User.count({
-      where: { role: 'employee' }
-    });
-    
+
+    const [countResult] = await db.sequelize.query(
+      'SELECT COUNT(*) AS empCount FROM User WHERE role = "employee"',
+      { type: db.Sequelize.QueryTypes.SELECT }
+    );
+
     res.status(201).send({
-      message: `Broadcast message sent to ${employeeCount} employees!`,
-      data: broadcastMessage,
-      recipientCount: employeeCount
+      message:        `Broadcast sent to ${countResult.empCount} employees!`,
+      data:           msg,
+      recipientCount: Number(countResult.empCount),
     });
-    
   } catch (err) {
     console.error("Error broadcasting message:", err);
     res.status(500).send({ message: "Error broadcasting message." });

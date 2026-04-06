@@ -1,225 +1,256 @@
 import db from "../models/index.js";
+
 const Clock = db.clock;
 
-export const clockIn = async (req, res) => {
-  try {
-    if (!req.body.shiftId) {
-      return res.status(400).send({ message: "shiftId is required!" });
-    }
-    const now = Date.now();
-    const clock = await Clock.create({
-      shiftId: req.body.shiftId,
-      userId: req.user.userId,
-      clockInTime: now,
-      status: "pending",   // ✅ employees submit as pending for employer review
-      notes: req.body.notes ?? null,
-      createdAt: now,
-    });
-    return res.status(201).send(clock);
-  } catch (err) {
-    return res.status(500).send({ message: err.message || "Error clocking in." });
-  }
-};
+const getClockId = (req) => req.params.id || req.params.clockId;
+const getUserId  = (req) => req.user?.userId || req.user?.user_id || req.user?.id;
 
-export const clockOut = async (req, res) => {
-  try {
-    const id = req.params.id;
-    const clock = await Clock.findByPk(id);
-    if (!clock) {
-      return res.status(404).send({ message: `Clock record not found with id=${id}` });
-    }
-    if (clock.clockOutTime) {
-      return res.status(400).send({ message: "Already clocked out." });
-    }
-    const now = Date.now();
-    const hoursWorked = ((now - clock.clockInTime) / (1000 * 60 * 60)).toFixed(2);
-    const [updated] = await Clock.update(
-      { clockOutTime: now, totalHoursWorked: hoursWorked, status: "pending" },
-      { where: { id } }
-    );
-    if (updated === 1) {
-      return res.send({ message: "Clocked out successfully.", totalHoursWorked: parseFloat(hoursWorked) });
-    }
-    return res.status(500).send({ message: "Error clocking out." });
-  } catch (err) {
-    return res.status(500).send({ message: err.message || "Error clocking out." });
-  }
-};
-
+// ── GET ALL ───────────────────────────────────────────────────────────────
+// Employers see all records at their work_location.
+// If work_location is missing, fall back to showing all records (admin-style).
 export const findAll = async (req, res) => {
   try {
-    // ✅ Include user info so employer sees employee names
-    const User = db.user;
-    const records = await Clock.findAll({
-      include: [
-        {
-          model: User,
-          // ✅ No 'as' alias — matches the association in models/index.js which has none
-          attributes: ['id', 'fName', 'lName', 'email'],
-          required: false
-        }
-      ],
-      order: [['createdAt', 'DESC']]
-    });
+    const requestingRole     = req.user?.role;
+    const requestingUserId   = getUserId(req);
+    const workLocation       = req.user?.work_location;
 
-    const formatted = records.map(r => {
-      const plain = r.get({ plain: true });
-      // Sequelize uses the model name as key when no alias: plain.User
-      const u = plain.User || plain.user;
-      return {
-        ...plain,
-        clock_in: plain.clockInTime,
-        clockIn: plain.clockInTime,
-        clock_out: plain.clockOutTime,
-        clockOut: plain.clockOutTime,
-        employee_name: u ? `${u.fName} ${u.lName}` : 'Unknown',
-        employeeName: u ? `${u.fName} ${u.lName}` : 'Unknown',
-      };
-    });
+    let records;
 
-    return res.send(formatted);
+    if (requestingRole === 'employer' || requestingRole === 'admin') {
+
+      if (workLocation) {
+        // Scoped: only records for employees at this location
+        records = await db.sequelize.query(`
+          SELECT
+            c.clock_id,
+            c.clock_id   AS id,
+            c.shift_id,
+            c.user_id,
+            c.clock_in_time   AS clockInTime,
+            c.clock_out_time  AS clockOutTime,
+            c.total_hours_worked AS totalHoursWorked,
+            c.status,
+            c.notes,
+            c.approved_by  AS approvedBy,
+            c.approved_at  AS approvedAt,
+            c.created_at   AS createdAt,
+            CONCAT(u.first_name, ' ', u.last_name) AS employee_name,
+            u.email AS employee_email,
+            u.work_location
+          FROM Clock_IN_Clock_OUT c
+          LEFT JOIN User u ON c.user_id = u.user_id
+          WHERE u.work_location = :locationId
+             OR EXISTS (
+               SELECT 1 FROM Shift s
+               WHERE s.shift_id = c.shift_id
+                 AND s.location_id = :locationId
+             )
+          ORDER BY c.clock_in_time DESC
+        `, {
+          replacements: { locationId: workLocation },
+          type: db.Sequelize.QueryTypes.SELECT,
+        });
+
+      } else {
+        // No work_location set — return all records (admin fallback)
+        records = await db.sequelize.query(`
+          SELECT
+            c.clock_id,
+            c.clock_id   AS id,
+            c.shift_id,
+            c.user_id,
+            c.clock_in_time   AS clockInTime,
+            c.clock_out_time  AS clockOutTime,
+            c.total_hours_worked AS totalHoursWorked,
+            c.status,
+            c.notes,
+            c.approved_by  AS approvedBy,
+            c.approved_at  AS approvedAt,
+            c.created_at   AS createdAt,
+            CONCAT(u.first_name, ' ', u.last_name) AS employee_name,
+            u.email AS employee_email,
+            u.work_location
+          FROM Clock_IN_Clock_OUT c
+          LEFT JOIN User u ON c.user_id = u.user_id
+          ORDER BY c.clock_in_time DESC
+        `, { type: db.Sequelize.QueryTypes.SELECT });
+      }
+
+    } else {
+      // Employee: only their own records
+      records = await db.sequelize.query(`
+        SELECT
+          c.clock_id,
+          c.clock_id   AS id,
+          c.shift_id,
+          c.user_id,
+          c.clock_in_time   AS clockInTime,
+          c.clock_out_time  AS clockOutTime,
+          c.total_hours_worked AS totalHoursWorked,
+          c.status,
+          c.notes,
+          c.approved_by  AS approvedBy,
+          c.approved_at  AS approvedAt,
+          c.created_at   AS createdAt,
+          CONCAT(u.first_name, ' ', u.last_name) AS employee_name,
+          u.email AS employee_email
+        FROM Clock_IN_Clock_OUT c
+        LEFT JOIN User u ON c.user_id = u.user_id
+        WHERE c.user_id = :userId
+        ORDER BY c.clock_in_time DESC
+      `, {
+        replacements: { userId: requestingUserId },
+        type: db.Sequelize.QueryTypes.SELECT,
+      });
+    }
+
+    console.log(`✅ Clock records returned: ${records.length}`);
+    res.send(records);
+
   } catch (err) {
-    return res.status(500).send({ message: err.message || "Error retrieving clock records." });
+    console.error("Error retrieving clock records:", err);
+    res.status(500).send({ message: "Error retrieving clock records.", error: err.message });
   }
 };
 
+// ── GET ONE ───────────────────────────────────────────────────────────────
 export const findOne = async (req, res) => {
   try {
-    const id = req.params.id;
-    const clock = await Clock.findByPk(id);
-    if (!clock) {
-      return res.status(404).send({ message: `Clock record not found with id=${id}` });
-    }
-    return res.send(clock);
+    const record = await Clock.findByPk(getClockId(req));
+    if (!record) return res.status(404).send({ message: "Clock record not found." });
+    res.send(record);
   } catch (err) {
-    return res.status(500).send({ message: err.message || "Error retrieving clock record." });
+    console.error("Error retrieving clock record:", err);
+    res.status(500).send({ message: "Error retrieving clock record." });
   }
 };
 
-export const findByUser = async (req, res) => {
+// ── CLOCK IN ──────────────────────────────────────────────────────────────
+export const clockIn = async (req, res) => {
   try {
-    const userId = req.params.userId;
-    const records = await Clock.findAll({ where: { userId }, order: [['createdAt', 'DESC']] });
-    return res.send(records);
+    const userId  = getUserId(req);
+    const shiftId = req.body.shiftId || req.body.shift_id;
+
+    if (!shiftId) return res.status(400).send({ message: "shiftId is required." });
+
+    // Check not already clocked in
+    const existing = await Clock.findOne({ where: { userId, status: 'clocked_in' } });
+    if (existing) return res.status(400).send({ message: "Already clocked in." });
+
+    const record = await Clock.create({
+      shiftId,
+      userId,
+      clockInTime: Date.now(),
+      status:      'clocked_in',
+      createdAt:   Date.now(),
+    });
+
+    res.status(201).send(record);
   } catch (err) {
-    return res.status(500).send({ message: err.message || "Error retrieving user clock records." });
+    console.error("Error clocking in:", err);
+    res.status(500).send({ message: "Error clocking in." });
   }
 };
 
-export const update = async (req, res) => {
+// ── CLOCK OUT ─────────────────────────────────────────────────────────────
+export const clockOut = async (req, res) => {
   try {
-    const id = req.params.id;
-    const { notes, status, approvedBy, approvedAt } = req.body;
-    const [updated] = await Clock.update({ notes, status, approvedBy, approvedAt }, { where: { id } });
-    if (updated === 1) return res.send({ message: "Clock record updated successfully." });
-    return res.status(404).send({ message: "Clock record not found or no data changed." });
+    const userId = getUserId(req);
+
+    const record = await Clock.findOne({ where: { userId, status: 'clocked_in' } });
+    if (!record) return res.status(404).send({ message: "No active clock-in found." });
+
+    const clockOutTime = Date.now();
+    const totalHours   = parseFloat(((clockOutTime - Number(record.clockInTime)) / (1000 * 60 * 60)).toFixed(2));
+
+    await Clock.update(
+      { clockOutTime, totalHoursWorked: totalHours, status: 'pending' },
+      { where: { id: record.id } }
+    );
+
+    const updated = await Clock.findByPk(record.id);
+    res.send(updated);
   } catch (err) {
-    return res.status(500).send({ message: err.message || "Error updating clock record." });
+    console.error("Error clocking out:", err);
+    res.status(500).send({ message: "Error clocking out." });
   }
 };
 
-export const remove = async (req, res) => {
-  try {
-    const id = req.params.id;
-    const deleted = await Clock.destroy({ where: { id } });
-    if (deleted) return res.send({ message: "Clock record deleted successfully." });
-    return res.status(404).send({ message: "Clock record not found." });
-  } catch (err) {
-    return res.status(500).send({ message: err.message || "Error deleting clock record." });
-  }
-};
-
-// ✅ NEW: Employer approves a submitted time card
+// ── APPROVE ───────────────────────────────────────────────────────────────
 export const approve = async (req, res) => {
   try {
-    const id = req.params.id;
-    const clock = await Clock.findByPk(id);
-    if (!clock) {
-      return res.status(404).send({ message: "Clock record not found." });
-    }
-    if (clock.status === 'approved') {
-      return res.status(400).send({ message: "Time card already approved." });
-    }
-    await Clock.update(
-      {
-        status: 'approved',
-        approvedBy: req.user?.userId || req.user?.id || null,
-        approvedAt: Date.now(),
-      },
-      { where: { id } }
+    const approverId = getUserId(req);
+    const [updated]  = await Clock.update(
+      { status: 'approved', approvedBy: approverId, approvedAt: Date.now() },
+      { where: { id: getClockId(req) } }
     );
-    return res.send({ message: "Time card approved successfully." });
+    if (updated === 0) return res.status(404).send({ message: "Clock record not found." });
+    res.send({ message: "Time card approved." });
   } catch (err) {
-    return res.status(500).send({ message: err.message || "Error approving time card." });
+    console.error("Error approving clock record:", err);
+    res.status(500).send({ message: "Error approving time card." });
   }
 };
 
-// ✅ NEW: Employer rejects a submitted time card
+// ── REJECT ────────────────────────────────────────────────────────────────
 export const reject = async (req, res) => {
   try {
-    const id = req.params.id;
-    const clock = await Clock.findByPk(id);
-    if (!clock) {
-      return res.status(404).send({ message: "Clock record not found." });
-    }
-    await Clock.update(
-      {
-        status: 'rejected',
-        approvedBy: req.user?.userId || req.user?.id || null,
-        approvedAt: Date.now(),
-        notes: req.body.reason
-          ? `REJECTED: ${req.body.reason}`
-          : (clock.notes ? `REJECTED. ${clock.notes}` : 'REJECTED by employer'),
-      },
-      { where: { id } }
+    const reason    = req.body.reason || '';
+    const [updated] = await Clock.update(
+      { status: 'rejected', notes: reason },
+      { where: { id: getClockId(req) } }
     );
-    return res.send({ message: "Time card rejected." });
+    if (updated === 0) return res.status(404).send({ message: "Clock record not found." });
+    res.send({ message: "Time card rejected." });
   } catch (err) {
-    return res.status(500).send({ message: err.message || "Error rejecting time card." });
+    console.error("Error rejecting clock record:", err);
+    res.status(500).send({ message: "Error rejecting time card." });
   }
 };
 
-// ✅ NEW: Employer modifies clock in/out times and auto-approves
+// ── MODIFY (employer edits and auto-approves) ─────────────────────────────
 export const modify = async (req, res) => {
   try {
-    const id = req.params.id;
-    const clock = await Clock.findByPk(id);
-    if (!clock) {
-      return res.status(404).send({ message: "Clock record not found." });
-    }
-
+    const approverId = getUserId(req);
     const { clockInTime, clockOutTime, notes } = req.body;
 
-    if (!clockInTime) {
-      return res.status(400).send({ message: "clockInTime is required." });
-    }
+    if (!clockInTime) return res.status(400).send({ message: "clockInTime is required." });
 
-    const inTime = Number(clockInTime);
-    const outTime = clockOutTime ? Number(clockOutTime) : null;
+    const inMs       = Number(clockInTime);
+    const outMs      = clockOutTime ? Number(clockOutTime) : null;
+    const totalHours = outMs ? parseFloat(((outMs - inMs) / (1000 * 60 * 60)).toFixed(2)) : null;
 
-    let totalHoursWorked = null;
-    if (outTime) {
-      totalHoursWorked = ((outTime - inTime) / (1000 * 60 * 60)).toFixed(2);
-    }
-
-    await Clock.update(
+    const [updated] = await Clock.update(
       {
-        clockInTime: inTime,
-        clockOutTime: outTime,
-        totalHoursWorked: totalHoursWorked ? parseFloat(totalHoursWorked) : null,
-        status: 'approved',
-        approvedBy: req.user?.userId || req.user?.id || null,
-        approvedAt: Date.now(),
-        notes: notes || `Modified by employer`,
+        clockInTime:      inMs,
+        clockOutTime:     outMs,
+        totalHoursWorked: totalHours,
+        notes:            notes || 'Modified by employer',
+        status:           'approved',
+        approvedBy:       approverId,
+        approvedAt:       Date.now(),
       },
-      { where: { id } }
+      { where: { id: getClockId(req) } }
     );
 
-    return res.send({
-      message: "Time card modified and approved.",
-      totalHoursWorked: totalHoursWorked ? parseFloat(totalHoursWorked) : null,
-    });
+    if (updated === 0) return res.status(404).send({ message: "Clock record not found." });
+
+    const record = await Clock.findByPk(getClockId(req));
+    res.send(record);
   } catch (err) {
-    return res.status(500).send({ message: err.message || "Error modifying time card." });
+    console.error("Error modifying clock record:", err);
+    res.status(500).send({ message: "Error modifying time card." });
+  }
+};
+
+// ── DELETE ────────────────────────────────────────────────────────────────
+export const remove = async (req, res) => {
+  try {
+    const deleted = await Clock.destroy({ where: { id: getClockId(req) } });
+    if (!deleted) return res.status(404).send({ message: "Clock record not found." });
+    res.send({ message: "Clock record deleted." });
+  } catch (err) {
+    console.error("Error deleting clock record:", err);
+    res.status(500).send({ message: "Error deleting clock record." });
   }
 };
