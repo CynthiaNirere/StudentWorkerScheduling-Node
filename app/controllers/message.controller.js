@@ -74,8 +74,6 @@ export const send = async (req, res) => {
 };
 
 // ── INBOX ─────────────────────────────────────────────────────────────────
-// ✅ FIX: broadcasts are excluded if the current user is the sender
-// — they see it in Sent, not duplicated in Inbox
 export const getInbox = async (req, res) => {
   try {
     const userId = getSenderId(req);
@@ -93,15 +91,16 @@ export const getInbox = async (req, res) => {
         m.is_read,
         m.created_at,
         m.read_at,
-        CONCAT(u.first_name, ' ', u.last_name) AS sender_name,
-        u.email AS sender_email
+        CONCAT(s.first_name, ' ', s.last_name) AS sender_name,
+        s.email AS sender_email,
+        CONCAT(r.first_name, ' ', r.last_name) AS recipient_name,
+        r.email AS recipient_email
       FROM Message m
-      LEFT JOIN User u ON m.sender_id = u.user_id
+      LEFT JOIN User s ON m.sender_id    = s.user_id
+      LEFT JOIN User r ON m.recipient_id = r.user_id
       WHERE
-        -- Direct messages addressed to this user
         m.recipient_id = ?
         OR
-        -- Broadcasts sent by someone else (not this user's own broadcasts)
         (m.recipient_id IS NULL AND m.message_type = 'broadcast' AND m.sender_id != ?)
       ORDER BY m.created_at DESC
     `, {
@@ -134,9 +133,12 @@ export const getSentMessages = async (req, res) => {
         m.is_read,
         m.created_at,
         m.read_at,
+        CONCAT(s.first_name, ' ', s.last_name) AS sender_name,
+        s.email AS sender_email,
         CONCAT(r.first_name, ' ', r.last_name) AS recipient_name,
         r.email AS recipient_email
       FROM Message m
+      LEFT JOIN User s ON m.sender_id    = s.user_id
       LEFT JOIN User r ON m.recipient_id = r.user_id
       WHERE m.sender_id = ?
       ORDER BY m.created_at DESC
@@ -145,36 +147,7 @@ export const getSentMessages = async (req, res) => {
       type: db.Sequelize.QueryTypes.SELECT,
     });
 
-    // Group by thread_id so multi-recipient sends appear as one entry
-    const grouped = new Map();
-    for (const msg of messages) {
-      const key = msg.thread_id || `${msg.created_at}-${msg.subject}`;
-      if (!grouped.has(key)) {
-        grouped.set(key, {
-          message_id:    msg.message_id,
-          thread_id:     key,
-          sender_id:     msg.sender_id,
-          subject:       msg.subject,
-          message:       msg.message,
-          message_type:  msg.message_type,
-          link_url:      msg.link_url,
-          is_read:       msg.is_read,
-          created_at:    msg.created_at,
-          recipients:    [],
-          recipient_ids: [],
-        });
-      }
-      const g = grouped.get(key);
-      if (msg.recipient_name) g.recipients.push(msg.recipient_name);
-      if (msg.recipient_id)   g.recipient_ids.push(msg.recipient_id);
-    }
-
-    const result = [...grouped.values()].map(g => ({
-      ...g,
-      recipient_name: g.message_type === 'broadcast' ? 'All Employees' : g.recipients.join(', '),
-    }));
-
-    res.send(result);
+    res.send(messages);
   } catch (err) {
     console.error("Error retrieving sent messages:", err);
     res.status(500).send({ message: "Error retrieving sent messages." });
