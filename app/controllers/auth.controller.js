@@ -27,7 +27,6 @@ exports.login = async (req, res) => {
     let firstName = googleUser.given_name;
     let lastName  = googleUser.family_name;
 
-    // Fallback to access token if profile incomplete
     if ((!email || !firstName || !lastName) && req.body.accessToken) {
       const oauth2Client = new OAuth2Client(google_id);
       oauth2Client.setCredentials({ access_token: req.body.accessToken });
@@ -40,115 +39,60 @@ exports.login = async (req, res) => {
 
     const now = Date.now();
 
-    // ── Find existing user by email ────────────────────────────────────
     console.log(`🔍 Looking for user with email: ${email}`);
     let user = await User.findOne({ where: { email } });
 
     if (!user) {
       console.log(`👤 GUEST USER detected: ${email}`);
-      
-      // Create session for guest
-      const guestToken = jwt.sign(
-        { email, isGuest: true }, 
-        authconfig.secret, 
-        { expiresIn: 86400 }
-      );
-      const expiresAt = now + 86400 * 1000;
+      const guestToken = jwt.sign({ email, isGuest: true }, authconfig.secret, { expiresIn: 86400 });
+      const expiresAt  = now + 86400 * 1000;
 
-      await Session.create({
-        token: guestToken,
-        userId: null, // No user_id for guests
-        createdAt: now,
-        isActive: 1,
-        expiresAt: expiresAt,
-      });
-
+      await Session.create({ token: guestToken, userId: null, createdAt: now, isActive: 1, expiresAt });
       console.log("✅ Guest session created for:", email);
-      
+
       return res.send({
-        userId: null,
-        user_id: null,
-        email: email,
-        fName: firstName,
-        lName: lastName,
-        first_name: firstName,
-        last_name: lastName,
-        role: 'guest',
-        isGuest: true,
-        work_location: null,
+        userId: null, user_id: null, email,
+        fName: firstName, lName: lastName,
+        first_name: firstName, last_name: lastName,
+        role: 'guest', isGuest: true, work_location: null,
         token: guestToken,
-        message: "Guest login - not registered in system"
+        message: "Guest login - not registered in system",
       });
     }
 
-    // ✅ REGISTERED USER FOUND
-    console.log(`✅ Found registered user:`, {
-      id: user.id,
-      email: user.email,
-      role: user.role,
-      fName: user.fName,
-      lName: user.lName,
-      work_location: user.work_location
-    });
+    console.log(`✅ Found registered user:`, { id: user.id, email: user.email, role: user.role, work_location: user.work_location });
 
     const nameChanged = user.fName !== firstName || user.lName !== lastName;
     if (nameChanged) {
-      console.log(`📝 Updating user name from ${user.fName} ${user.lName} to ${firstName} ${lastName}`);
-      await User.update(
-        { fName: firstName, lName: lastName, updatedAt: now },
-        { where: { id: user.id } }
-      );
+      await User.update({ fName: firstName, lName: lastName, updatedAt: now }, { where: { id: user.id } });
       user.fName = firstName;
       user.lName = lastName;
     }
 
-    // ── BEHAVIOR 1: No workplace → blocked ────────────────────────────────
-    // User is in DB but has no workplace assigned yet
-    if (!user.work_location) {
+    // ── BEHAVIOR 1: No workplace → blocked (admins bypass) ────────────
+    if (!user.work_location && user.role !== 'admin') {
       console.log(`User ${email} has no work_location → blocking`);
       return res.status(200).send({
         blocked: true,
         reason:  'no_workplace',
         message: "Your account exists but hasn't been assigned to a workplace yet. Ask your supervisor.",
-        email:  user.email,
-        fName:  user.fName,
-        lName:  user.lName,
+        email: user.email, fName: user.fName, lName: user.lName,
       });
     }
 
-    // ── BEHAVIOR 2: Multiple workplaces → show picker ─────────────────────
+    // ── BEHAVIOR 2: Multiple workplaces → show picker ─────────────────
     let workplaces = [];
     try {
       if (db.userWorkplace) {
-        const uwRecords = await db.userWorkplace.findAll({
-          where: { userId: user.id },
-        });
+        const uwRecords = await db.userWorkplace.findAll({ where: { userId: user.id } });
         if (uwRecords.length > 1) {
           const locationIds = uwRecords.map(uw => uw.locationId);
-          const areas = await BusinessArea.findAll({
-            where: { location_id: locationIds },
-          });
-          workplaces = areas.map(a => ({
-            location_id: a.location_id,
-            name:        a.name,
-            address:     a.address || '',
-          }));
+          const areas       = await BusinessArea.findAll({ where: { location_id: locationIds } });
+          workplaces = areas.map(a => ({ location_id: a.location_id, name: a.name, address: a.address || '' }));
         }
       }
     } catch (err) {
       console.warn("UserWorkplace lookup failed:", err.message);
-    }
-
-    // ── BEHAVIOR 2: No workplace → blocked / guest ─────────────────────────
-    if (!user.work_location && workplaces.length === 0) {
-      console.log("User has no workplace:", email, "→ blocking login");
-      return res.status(200).send({
-        blocked: true,
-        message: "Your account is not linked to any workplace yet. Ask your supervisor to add you.",
-        email:  user.email,
-        fName:  user.fName,
-        lName:  user.lName,
-      });
     }
 
     if (workplaces.length > 1) {
@@ -156,83 +100,152 @@ exports.login = async (req, res) => {
       const token     = jwt.sign({ id: user.id }, authconfig.secret, { expiresIn: 86400 });
       const expiresAt = now + 86400 * 1000;
       await Session.create({ token, userId: user.id, createdAt: now, isActive: 1, expiresAt });
-
       return res.status(200).send({
-        needsWorkplaceSelect: true,
-        workplaces,
-        userId:        user.id,
-        user_id:       user.id,
-        email:         user.email,
-        fName:         user.fName,
-        lName:         user.lName,
-        first_name:    user.fName,
-        last_name:     user.lName,
-        role:          user.role,
-        work_location: user.work_location,
-        token,
+        needsWorkplaceSelect: true, workplaces,
+        userId: user.id, user_id: user.id, email: user.email,
+        fName: user.fName, lName: user.lName, first_name: user.fName, last_name: user.lName,
+        role: user.role, work_location: user.work_location, token,
       });
     }
 
-    // ── BEHAVIOR 3: Normal single-workplace login ─────────────────────────
-    // Reuse existing valid session
-    const existingSession = await Session.findOne({
-      where: { userId: user.id, isActive: 1 },
-    });
+    // ── BEHAVIOR 3: Normal login ──────────────────────────────────────
+    const existingSession = await Session.findOne({ where: { userId: user.id, isActive: 1 } });
 
     if (existingSession) {
       if (existingSession.expiresAt && existingSession.expiresAt < now) {
         console.log("⏰ Session expired, creating new one");
-        await Session.update(
-          { isActive: 0 }, 
-          { where: { id: existingSession.id } }
-        );
+        await Session.update({ isActive: 0 }, { where: { id: existingSession.id } });
       } else {
         console.log("♻️ Returning existing valid session");
         return res.send(buildUserPayload(user, existingSession.token));
       }
     }
 
-    // Create new session for registered user
     console.log("🆕 Creating new session for user:", user.id);
-    const token = jwt.sign({ id: user.id }, authconfig.secret, { expiresIn: 86400 });
+    const token     = jwt.sign({ id: user.id }, authconfig.secret, { expiresIn: 86400 });
     const expiresAt = now + 86400 * 1000;
     await Session.create({ token, userId: user.id, createdAt: now, isActive: 1, expiresAt });
-
-    await Session.create({
-      token,
-      userId: user.id,
-      createdAt: now,
-      isActive: 1,
-      expiresAt: expiresAt,
-    });
 
     console.log("✅ New session created for", user.email, "role:", user.role);
     return res.send(buildUserPayload(user, token));
 
   } catch (err) {
     console.error("Login error:", err);
-    return res.status(500).send({
-      message: err.message || "Error during login",
-      error: process.env.NODE_ENV === "development" ? err.stack : undefined,
+    return res.status(500).send({ message: err.message || "Error during login", error: process.env.NODE_ENV === "development" ? err.stack : undefined });
+  }
+};
+
+// ── IMPERSONATE ───────────────────────────────────────────────────────────
+// Admin enters a workplace view without creating a DB session.
+// A short-lived JWT carries impersonation metadata; the original admin token
+// is stored in localStorage so we can restore it on exit.
+exports.impersonate = async (req, res) => {
+  try {
+    const adminId   = req.user?.userId || req.user?.id;
+    const adminUser = await User.findOne({ where: { id: adminId } });
+
+    if (!adminUser || adminUser.role !== 'admin') {
+      return res.status(403).send({ message: "Only admins can impersonate workplaces." });
+    }
+
+    const { locationId } = req.body;
+    if (!locationId) return res.status(400).send({ message: "locationId is required." });
+
+    const area = await BusinessArea.findOne({ where: { location_id: locationId } });
+    if (!area) return res.status(404).send({ message: "Workplace not found." });
+
+    // Mint a 1-hour impersonation token. Role is 'employer' so all employer
+    // middleware/queries work correctly. actualRole='admin' lets the layout
+    // know to show the impersonation banner.
+    const impersonationToken = jwt.sign(
+      {
+        id:                       adminUser.id,
+        role:                     'employer',
+        actualRole:               'admin',
+        isImpersonating:          true,
+        impersonatedLocation:     locationId,
+        impersonatedLocationName: area.name,
+      },
+      authconfig.secret,
+      { expiresIn: 3600 }
+    );
+
+    console.log(`👁️ Admin ${adminUser.email} impersonating: ${area.name} (${locationId})`);
+
+    return res.send({
+      token:                    impersonationToken,
+      isImpersonating:          true,
+      impersonatedLocation:     locationId,
+      impersonatedLocationName: area.name,
+      userId:        adminUser.id,
+      user_id:       adminUser.id,
+      email:         adminUser.email,
+      fName:         adminUser.fName,
+      lName:         adminUser.lName,
+      first_name:    adminUser.fName,
+      last_name:     adminUser.lName,
+      role:          'employer',
+      actualRole:    'admin',
+      work_location: locationId,
     });
+
+  } catch (err) {
+    console.error("Impersonation error:", err);
+    return res.status(500).send({ message: "Error starting impersonation." });
+  }
+};
+
+// ── EXIT IMPERSONATION ────────────────────────────────────────────────────
+// Client sends back the original admin token it saved in localStorage.
+// We verify it and return the admin payload so the frontend restores state.
+exports.exitImpersonation = async (req, res) => {
+  try {
+    const { adminToken } = req.body;
+    if (!adminToken) return res.status(400).send({ message: "adminToken is required." });
+
+    let decoded;
+    try {
+      decoded = jwt.verify(adminToken, authconfig.secret);
+    } catch {
+      return res.status(401).send({ message: "Invalid or expired admin token." });
+    }
+
+    const adminUser = await User.findOne({ where: { id: decoded.id } });
+    if (!adminUser || adminUser.role !== 'admin') {
+      return res.status(403).send({ message: "Token does not belong to an admin." });
+    }
+
+    console.log(`✅ Admin ${adminUser.email} exited impersonation`);
+
+    return res.send({
+      message:         "Impersonation ended.",
+      isImpersonating: false,
+      userId:          adminUser.id,
+      user_id:         adminUser.id,
+      email:           adminUser.email,
+      fName:           adminUser.fName,
+      lName:           adminUser.lName,
+      first_name:      adminUser.fName,
+      last_name:       adminUser.lName,
+      role:            'admin',
+      work_location:   adminUser.work_location,
+      token:           adminToken,
+    });
+
+  } catch (err) {
+    console.error("Exit impersonation error:", err);
+    return res.status(500).send({ message: "Error exiting impersonation." });
   }
 };
 
 function buildUserPayload(user, token) {
   const payload = {
-    userId: user.id,
-    user_id: user.id,
-    email: user.email,
-    fName: user.fName,
-    lName: user.lName,
-    first_name: user.fName,
-    last_name: user.lName,
-    role: user.role,
-    isGuest: false,
-    work_location: user.work_location,
-    token,
+    userId: user.id, user_id: user.id, email: user.email,
+    fName: user.fName, lName: user.lName,
+    first_name: user.fName, last_name: user.lName,
+    role: user.role, isGuest: false,
+    work_location: user.work_location, token,
   };
-  
   console.log("📦 Built user payload:", payload);
   return payload;
 }
@@ -241,13 +254,8 @@ exports.logout = async (req, res) => {
   if (!req.body?.token) return res.send({ message: "Already logged out." });
   try {
     const session = await Session.findOne({ where: { token: req.body.token } });
-    if (!session) {
-      return res.send({ message: "Already logged out." });
-    }
-    await Session.update(
-      { isActive: 0 },
-      { where: { id: session.id } }
-    );
+    if (!session) return res.send({ message: "Already logged out." });
+    await Session.update({ isActive: 0 }, { where: { id: session.id } });
     console.log("✅ Logged out successfully");
     return res.send({ message: "Logged out successfully." });
   } catch (err) {
