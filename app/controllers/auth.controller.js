@@ -70,19 +70,7 @@ exports.login = async (req, res) => {
       console.log("New user created:", user.id, "— no workplace yet");
     }
 
-    // ── BEHAVIOR 1: No workplace → blocked / guest ─────────────────────────
-    if (!user.work_location) {
-      console.log("User has no workplace:", email, "→ blocking login");
-      return res.status(200).send({
-        blocked: true,
-        message: "Your account is not linked to any workplace yet. Ask your supervisor to add you.",
-        email:  user.email,
-        fName:  user.fName,
-        lName:  user.lName,
-      });
-    }
-
-    // ── BEHAVIOR 2: Check for multiple workplaces ──────────────────────────
+    // ── BEHAVIOR 1: Check for multiple workplaces first ──────────────────────
     let workplaces = [];
     try {
       if (db.userWorkplace) {
@@ -105,6 +93,18 @@ exports.login = async (req, res) => {
       }
     } catch (err) {
       console.warn("UserWorkplace lookup failed (using work_location fallback):", err.message);
+    }
+
+    // ── BEHAVIOR 2: No workplace → blocked / guest ─────────────────────────
+    if (!user.work_location && workplaces.length === 0) {
+      console.log("User has no workplace:", email, "→ blocking login");
+      return res.status(200).send({
+        blocked: true,
+        message: "Your account is not linked to any workplace yet. Ask your supervisor to add you.",
+        email:  user.email,
+        fName:  user.fName,
+        lName:  user.lName,
+      });
     }
 
     if (workplaces.length > 1) {
