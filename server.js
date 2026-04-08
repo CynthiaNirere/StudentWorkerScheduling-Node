@@ -7,7 +7,6 @@ import { resetDailyTasks } from './app/jobs/dailyTaskReset.js';
 
 const app = express();
 
-// ✅ FIXED CORS Configuration - removed duplicates
 const corsOptions = {
   origin: [
     "http://localhost:8080",
@@ -19,13 +18,13 @@ const corsOptions = {
   ],
   methods: ['GET', 'POST', 'PUT', 'DELETE', 'PATCH', 'OPTIONS'],
   allowedHeaders: [
-    "Content-Type", 
-    "Authorization", 
-    "x-requested-with", 
+    "Content-Type",
+    "Authorization",
+    "x-requested-with",
     "x-demo-mode",
-    "x-user-id",      
-    "x-user-email",   
-    "x-user-role"     
+    "x-user-id",
+    "x-user-email",
+    "x-user-role"
   ],
   credentials: true,
   optionsSuccessStatus: 200
@@ -33,7 +32,7 @@ const corsOptions = {
 
 app.use(cors(corsOptions));
 
-// ✅ Add explicit OPTIONS handling
+// Handle preflight OPTIONS requests for all routes
 app.options('*', cors(corsOptions));
 
 // Body Parsers
@@ -48,7 +47,7 @@ app.use((req, res, next) => {
 
 // ROOT ROUTE - API Health Check
 app.get("/", (req, res) => {
-  res.json({ 
+  res.json({
     message: "Worker Scheduling API is running!",
     version: "1.0.0",
     timestamp: new Date().toISOString(),
@@ -63,16 +62,13 @@ app.get("/", (req, res) => {
   });
 });
 
-// API Routes - ALL routes from index.js
+// API Routes
 app.use("/workerscheduling-t1/api", routes);
 
-// ============================================
-// CRON JOB SETUP
-// ============================================
+// ── CRON JOB SETUP ────────────────────────────────────────────────────────
 
 console.log("⏰ Setting up daily task reset cron job...");
 
-// Run at midnight (00:00) every day - Central Time
 cron.schedule('0 0 * * *', async () => {
   console.log('\n🕐 Midnight - Running daily task reset...');
   try {
@@ -91,25 +87,22 @@ app.post('/workerscheduling-t1/api/admin/trigger-task-reset', async (req, res) =
   try {
     console.log('🔧 Manual task reset triggered by admin');
     const result = await resetDailyTasks();
-    res.json({ 
-      success: true, 
+    res.json({
+      success: true,
       message: 'Task reset completed successfully',
       result
     });
   } catch (err) {
     console.error('Manual reset failed:', err);
-    res.status(500).json({ 
-      success: false, 
-      message: err.message 
+    res.status(500).json({
+      success: false,
+      message: err.message
     });
   }
 });
 
-// ============================================
-// END CRON JOB SETUP
-// ============================================
+// ── 404 Handler ───────────────────────────────────────────────────────────
 
-// 404 Handler
 app.use((req, res) => {
   res.status(404).json({
     message: "Route not found",
@@ -124,7 +117,8 @@ app.use((req, res) => {
   });
 });
 
-// Error Handler
+// ── Error Handler ─────────────────────────────────────────────────────────
+
 app.use((err, req, res, next) => {
   console.error("❌ Server Error:", err);
   res.status(err.status || 500).json({
@@ -133,7 +127,8 @@ app.use((err, req, res, next) => {
   });
 });
 
-// Database Sync & Server Start
+// ── Database Sync & Server Start ──────────────────────────────────────────
+
 const PORT = process.env.PORT || 3131;
 
 if (process.env.NODE_ENV !== "test") {

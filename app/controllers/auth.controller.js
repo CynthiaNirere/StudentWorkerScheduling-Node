@@ -3,52 +3,39 @@ import authconfig from "../config/auth.config.js";
 import { OAuth2Client } from "google-auth-library";
 import { google } from "googleapis";
 import jwt from "jsonwebtoken";
-import crypto from "crypto";
 
-const User = db.user;
-const Session = db.session;
+const User         = db.user;
+const Session      = db.session;
+const BusinessArea = db.businessArea;
 
 const google_id = process.env.CLIENT_ID;
-const google_secret = process.env.CLIENT_SECRET;
 
 const exports = {};
 
 exports.login = async (req, res) => {
   console.log("=== LOGIN REQUEST ===");
-  console.log("Request body:", req.body);
 
   try {
     const googleToken = req.body.credential;
+    if (!googleToken) return res.status(400).send({ message: "No credential provided" });
 
-    if (!googleToken) {
-      return res.status(400).send({ message: "No credential provided" });
-    }
-
-    const client = new OAuth2Client(google_id);
-    const ticket = await client.verifyIdToken({
-      idToken: googleToken,
-      audience: google_id,
-    });
+    const client     = new OAuth2Client(google_id);
+    const ticket     = await client.verifyIdToken({ idToken: googleToken, audience: google_id });
     const googleUser = ticket.getPayload();
-    console.log("Google payload:", JSON.stringify(googleUser));
 
-    let googleSub = googleUser.sub;
-    let email = googleUser.email;
+    let email     = googleUser.email;
     let firstName = googleUser.given_name;
-    let lastName = googleUser.family_name;
+    let lastName  = googleUser.family_name;
 
-    if (
-      (!email || !firstName || !lastName) &&
-      req.body.accessToken !== undefined
-    ) {
+    // Fallback to access token if profile incomplete
+    if ((!email || !firstName || !lastName) && req.body.accessToken) {
       const oauth2Client = new OAuth2Client(google_id);
       oauth2Client.setCredentials({ access_token: req.body.accessToken });
-      const oauth2 = google.oauth2({ auth: oauth2Client, version: "v2" });
+      const oauth2   = google.oauth2({ auth: oauth2Client, version: "v2" });
       const { data } = await oauth2.userinfo.get();
-      googleSub = googleSub || data.id;
-      email = email || data.email;
+      email     = email     || data.email;
       firstName = firstName || data.given_name;
-      lastName = lastName || data.family_name;
+      lastName  = lastName  || data.family_name;
     }
 
     const now = Date.now();
@@ -57,7 +44,6 @@ exports.login = async (req, res) => {
     console.log(`🔍 Looking for user with email: ${email}`);
     let user = await User.findOne({ where: { email } });
 
-    // ✅ GUEST USER HANDLING - User not found in database
     if (!user) {
       console.log(`👤 GUEST USER detected: ${email}`);
       
@@ -106,22 +92,89 @@ exports.login = async (req, res) => {
     });
 
     const nameChanged = user.fName !== firstName || user.lName !== lastName;
-    
     if (nameChanged) {
       console.log(`📝 Updating user name from ${user.fName} ${user.lName} to ${firstName} ${lastName}`);
       await User.update(
-        { 
-          fName: firstName, 
-          lName: lastName, 
-          updatedAt: now 
-        },
+        { fName: firstName, lName: lastName, updatedAt: now },
         { where: { id: user.id } }
       );
       user.fName = firstName;
       user.lName = lastName;
     }
 
-    // Check for existing session
+    // ── BEHAVIOR 1: No workplace → blocked ────────────────────────────────
+    // User is in DB but has no workplace assigned yet
+    if (!user.work_location) {
+      console.log(`User ${email} has no work_location → blocking`);
+      return res.status(200).send({
+        blocked: true,
+        reason:  'no_workplace',
+        message: "Your account exists but hasn't been assigned to a workplace yet. Ask your supervisor.",
+        email:  user.email,
+        fName:  user.fName,
+        lName:  user.lName,
+      });
+    }
+
+    // ── BEHAVIOR 2: Multiple workplaces → show picker ─────────────────────
+    let workplaces = [];
+    try {
+      if (db.userWorkplace) {
+        const uwRecords = await db.userWorkplace.findAll({
+          where: { userId: user.id },
+        });
+        if (uwRecords.length > 1) {
+          const locationIds = uwRecords.map(uw => uw.locationId);
+          const areas = await BusinessArea.findAll({
+            where: { location_id: locationIds },
+          });
+          workplaces = areas.map(a => ({
+            location_id: a.location_id,
+            name:        a.name,
+            address:     a.address || '',
+          }));
+        }
+      }
+    } catch (err) {
+      console.warn("UserWorkplace lookup failed:", err.message);
+    }
+
+    // ── BEHAVIOR 2: No workplace → blocked / guest ─────────────────────────
+    if (!user.work_location && workplaces.length === 0) {
+      console.log("User has no workplace:", email, "→ blocking login");
+      return res.status(200).send({
+        blocked: true,
+        message: "Your account is not linked to any workplace yet. Ask your supervisor to add you.",
+        email:  user.email,
+        fName:  user.fName,
+        lName:  user.lName,
+      });
+    }
+
+    if (workplaces.length > 1) {
+      console.log(`User ${email} has ${workplaces.length} workplaces → sending picker`);
+      const token     = jwt.sign({ id: user.id }, authconfig.secret, { expiresIn: 86400 });
+      const expiresAt = now + 86400 * 1000;
+      await Session.create({ token, userId: user.id, createdAt: now, isActive: 1, expiresAt });
+
+      return res.status(200).send({
+        needsWorkplaceSelect: true,
+        workplaces,
+        userId:        user.id,
+        user_id:       user.id,
+        email:         user.email,
+        fName:         user.fName,
+        lName:         user.lName,
+        first_name:    user.fName,
+        last_name:     user.lName,
+        role:          user.role,
+        work_location: user.work_location,
+        token,
+      });
+    }
+
+    // ── BEHAVIOR 3: Normal single-workplace login ─────────────────────────
+    // Reuse existing valid session
     const existingSession = await Session.findOne({
       where: { userId: user.id, isActive: 1 },
     });
@@ -143,6 +196,7 @@ exports.login = async (req, res) => {
     console.log("🆕 Creating new session for user:", user.id);
     const token = jwt.sign({ id: user.id }, authconfig.secret, { expiresIn: 86400 });
     const expiresAt = now + 86400 * 1000;
+    await Session.create({ token, userId: user.id, createdAt: now, isActive: 1, expiresAt });
 
     await Session.create({
       token,
@@ -154,17 +208,16 @@ exports.login = async (req, res) => {
 
     console.log("✅ New session created for", user.email, "role:", user.role);
     return res.send(buildUserPayload(user, token));
-    
+
   } catch (err) {
-    console.error("❌ Login error:", err);
-    return res.status(500).send({ 
+    console.error("Login error:", err);
+    return res.status(500).send({
       message: err.message || "Error during login",
-      error: process.env.NODE_ENV === 'development' ? err.stack : undefined
+      error: process.env.NODE_ENV === "development" ? err.stack : undefined,
     });
   }
 };
 
-// ── Helper: shape the response the frontend stores ─────────────────────────
 function buildUserPayload(user, token) {
   const payload = {
     userId: user.id,
@@ -185,12 +238,7 @@ function buildUserPayload(user, token) {
 }
 
 exports.logout = async (req, res) => {
-  console.log("=== LOGOUT REQUEST ===");
-
-  if (!req.body?.token) {
-    return res.send({ message: "Already logged out." });
-  }
-
+  if (!req.body?.token) return res.send({ message: "Already logged out." });
   try {
     const session = await Session.findOne({ where: { token: req.body.token } });
     if (!session) {
@@ -203,7 +251,7 @@ exports.logout = async (req, res) => {
     console.log("✅ Logged out successfully");
     return res.send({ message: "Logged out successfully." });
   } catch (err) {
-    console.error("❌ Logout error:", err);
+    console.error("Logout error:", err);
     return res.status(500).send({ message: "Error logging out." });
   }
 };
