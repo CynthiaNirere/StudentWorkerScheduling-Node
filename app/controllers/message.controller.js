@@ -101,10 +101,16 @@ export const getInbox = async (req, res) => {
       WHERE
         m.recipient_id = ?
         OR
-        (m.recipient_id IS NULL AND m.message_type = 'broadcast' AND m.sender_id != ?)
+        (
+          m.recipient_id IS NULL
+          AND m.message_type = 'broadcast'
+          AND m.sender_id != ?
+          AND (SELECT work_location FROM User WHERE user_id = m.sender_id)
+              = (SELECT work_location FROM User WHERE user_id = ?)
+        )
       ORDER BY m.created_at DESC
     `, {
-      replacements: [userId, userId],
+      replacements: [userId, userId, userId],
       type: db.Sequelize.QueryTypes.SELECT,
     });
 
@@ -199,11 +205,17 @@ export const getUnreadCount = async (req, res) => {
       FROM Message
       WHERE (
         recipient_id = ?
-        OR (recipient_id IS NULL AND message_type = 'broadcast' AND sender_id != ?)
+        OR (
+          recipient_id IS NULL
+          AND message_type = 'broadcast'
+          AND sender_id != ?
+          AND (SELECT work_location FROM User WHERE user_id = sender_id)
+              = (SELECT work_location FROM User WHERE user_id = ?)
+        )
       )
       AND is_read = 0
     `, {
-      replacements: [userId, userId],
+      replacements: [userId, userId, userId],
       type: db.Sequelize.QueryTypes.SELECT,
     });
 
@@ -237,8 +249,8 @@ export const broadcast = async (req, res) => {
     });
 
     const [countResult] = await db.sequelize.query(
-      'SELECT COUNT(*) AS empCount FROM User WHERE role = "employee"',
-      { type: db.Sequelize.QueryTypes.SELECT }
+      'SELECT COUNT(*) AS empCount FROM User WHERE role = "employee" AND work_location = (SELECT work_location FROM User WHERE user_id = ?)',
+      { replacements: [senderId], type: db.Sequelize.QueryTypes.SELECT }
     );
 
     res.status(201).send({
