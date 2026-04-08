@@ -40,6 +40,10 @@ const User = sequelize.define(
       allowNull: false,
       defaultValue: "employee",
     },
+    job_role: {
+      type: DataTypes.STRING(255),
+      allowNull: true,
+    },
     work_location: {
       type: DataTypes.INTEGER,
       allowNull: true,

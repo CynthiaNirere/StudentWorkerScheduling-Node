@@ -54,6 +54,7 @@ exports.login = async (req, res) => {
     const now = Date.now();
 
     // ── Find existing user by email ────────────────────────────────────
+    console.log(`🔍 Looking for user with email: ${email}`);
     let user = await User.findOne({ where: { email } });
 
     // ✅ GUEST USER HANDLING - User not found in database
@@ -76,7 +77,7 @@ exports.login = async (req, res) => {
         expiresAt: expiresAt,
       });
 
-      console.log("Guest session created for:", email);
+      console.log("✅ Guest session created for:", email);
       
       return res.send({
         userId: null,
@@ -86,7 +87,7 @@ exports.login = async (req, res) => {
         lName: lastName,
         first_name: firstName,
         last_name: lastName,
-        role: 'guest', // ✅ GUEST ROLE
+        role: 'guest',
         isGuest: true,
         work_location: null,
         token: guestToken,
@@ -94,12 +95,20 @@ exports.login = async (req, res) => {
       });
     }
 
-    // ✅ REGISTERED USER - Update name if changed
-    console.log("Found existing user:", user.id, "role:", user.role);
+    // ✅ REGISTERED USER FOUND
+    console.log(`✅ Found registered user:`, {
+      id: user.id,
+      email: user.email,
+      role: user.role,
+      fName: user.fName,
+      lName: user.lName,
+      work_location: user.work_location
+    });
 
     const nameChanged = user.fName !== firstName || user.lName !== lastName;
     
     if (nameChanged) {
+      console.log(`📝 Updating user name from ${user.fName} ${user.lName} to ${firstName} ${lastName}`);
       await User.update(
         { 
           fName: firstName, 
@@ -119,18 +128,19 @@ exports.login = async (req, res) => {
 
     if (existingSession) {
       if (existingSession.expiresAt && existingSession.expiresAt < now) {
-        console.log("Session expired, creating new one");
+        console.log("⏰ Session expired, creating new one");
         await Session.update(
           { isActive: 0 }, 
           { where: { id: existingSession.id } }
         );
       } else {
-        console.log("Returning existing valid session");
+        console.log("♻️ Returning existing valid session");
         return res.send(buildUserPayload(user, existingSession.token));
       }
     }
 
     // Create new session for registered user
+    console.log("🆕 Creating new session for user:", user.id);
     const token = jwt.sign({ id: user.id }, authconfig.secret, { expiresIn: 86400 });
     const expiresAt = now + 86400 * 1000;
 
@@ -142,7 +152,7 @@ exports.login = async (req, res) => {
       expiresAt: expiresAt,
     });
 
-    console.log("New session created for", user.email, "role:", user.role);
+    console.log("✅ New session created for", user.email, "role:", user.role);
     return res.send(buildUserPayload(user, token));
     
   } catch (err) {
@@ -156,7 +166,7 @@ exports.login = async (req, res) => {
 
 // ── Helper: shape the response the frontend stores ─────────────────────────
 function buildUserPayload(user, token) {
-  return {
+  const payload = {
     userId: user.id,
     user_id: user.id,
     email: user.email,
@@ -165,10 +175,13 @@ function buildUserPayload(user, token) {
     first_name: user.fName,
     last_name: user.lName,
     role: user.role,
-    isGuest: false, // ✅ Regular users are not guests
+    isGuest: false,
     work_location: user.work_location,
     token,
   };
+  
+  console.log("📦 Built user payload:", payload);
+  return payload;
 }
 
 exports.logout = async (req, res) => {
@@ -187,7 +200,7 @@ exports.logout = async (req, res) => {
       { isActive: 0 },
       { where: { id: session.id } }
     );
-    console.log("Logged out successfully");
+    console.log("✅ Logged out successfully");
     return res.send({ message: "Logged out successfully." });
   } catch (err) {
     console.error("❌ Logout error:", err);
