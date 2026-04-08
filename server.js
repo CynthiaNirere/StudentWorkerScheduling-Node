@@ -17,7 +17,7 @@ const corsOptions = {
     "https://project3.eaglesoftwareteam.com"
   ],
   methods: ['GET', 'POST', 'PUT', 'DELETE', 'PATCH', 'OPTIONS'],
-  allowedHeaders: ["Content-Type", "Authorization", "x-requested-with", "x-demo-mode"],
+  allowedHeaders: ["Content-Type", "Authorization", "x-requested-with", "x-demo-mode", "x-user-id", "x-user-email", "x-user-role"],
   credentials: true,
 };
 
