@@ -1,63 +1,46 @@
 import express from "express";
 import * as admin from "../controllers/admin.controller.js";
-//import authenticate from "../authorization/authorization.js";
+import authenticate from "../authorization/authorization.js";
 
 const router = express.Router();
-/*
-// ========================================
-// USER MANAGEMENT ROUTES
-// ========================================
-router.post("/users", authenticate, admin.createUser);
-router.get("/users", authenticate, admin.getAllUsers);
-router.get("/users/:id", authenticate, admin.getUserById);
-router.put("/users/:id", authenticate, admin.updateUser);
-router.delete("/users/:id", authenticate, admin.deleteUser);
 
-// ========================================
-// BUSINESS AREA ROUTES
-// ========================================
-router.post("/business-areas", authenticate, admin.createBusinessArea);
-router.get("/business-areas", authenticate, admin.getAllBusinessAreas);
-router.get("/business-areas/:id", authenticate, admin.getBusinessAreaById);
-router.put("/business-areas/:id", authenticate, admin.updateBusinessArea);
-router.delete("/business-areas/:id", authenticate, admin.deleteBusinessArea);
-
-// ========================================
-// JOB ROLE ROUTES
-// ========================================
-router.post("/job-roles", authenticate, admin.createJobRole);
-router.get("/job-roles", authenticate, admin.getAllJobRoles);
-router.get("/job-roles/:id", authenticate, admin.getJobRoleById);
-router.put("/job-roles/:id", admin.updateJobRole);
-router.delete("/job-roles/:id", authenticate, admin.deleteJobRole);
-*/
+// ── Admin-only guard middleware ────────────────────────────────────────────
+// Runs after authenticate. Blocks anyone whose DB role is not 'admin'.
+// This prevents employers from calling /admin/* routes directly.
+const requireAdmin = (req, res, next) => {
+  const role = req.user?.actualRole || req.user?.role;
+  if (role !== 'admin') {
+    console.warn(`⛔ Non-admin attempted to access admin route: ${req.user?.email} (${role})`);
+    return res.status(403).send({ message: "Admin access required." });
+  }
+  next();
+};
 
 // ========================================
 // USER MANAGEMENT ROUTES
 // ========================================
-router.post("/users", admin.createUser);
-router.get("/users", admin.getAllUsers);
-router.get("/users/:id", admin.getUserById);
-router.put("/users/:id", admin.updateUser);
-router.delete("/users/:id", admin.deleteUser);
+router.post("/users",     authenticate, requireAdmin, admin.createUser);
+router.get("/users",      authenticate, requireAdmin, admin.getAllUsers);
+router.get("/users/:id",  authenticate, requireAdmin, admin.getUserById);
+router.put("/users/:id",  authenticate, requireAdmin, admin.updateUser);
+router.delete("/users/:id", authenticate, requireAdmin, admin.deleteUser);
 
 // ========================================
 // BUSINESS AREA ROUTES
 // ========================================
-router.post("/business-areas", admin.createBusinessArea);
-router.get("/business-areas", admin.getAllBusinessAreas);
-router.get("/business-areas/:id", admin.getBusinessAreaById);
-router.put("/business-areas", admin.updateBusinessArea);
-router.delete("/business-areas/:id", admin.deleteBusinessArea);
+router.post("/business-areas",      authenticate, requireAdmin, admin.createBusinessArea);
+router.get("/business-areas",       authenticate, requireAdmin, admin.getAllBusinessAreas);
+router.get("/business-areas/:id",   authenticate, requireAdmin, admin.getBusinessAreaById);
+router.put("/business-areas/:id",   authenticate, requireAdmin, admin.updateBusinessArea);
+router.delete("/business-areas/:id", authenticate, requireAdmin, admin.deleteBusinessArea);
 
 // ========================================
 // JOB ROLE ROUTES
 // ========================================
-router.post("/job-roles", admin.createJobRole);
-router.get("/job-roles", admin.getAllJobRoles);
-router.get("/job-roles/:id", admin.getJobRoleById);
-router.put("/job-roles/:id", admin.updateJobRole);
-router.delete("/job-roles/:id", admin.deleteJobRole);
-
+router.post("/job-roles",      authenticate, requireAdmin, admin.createJobRole);
+router.get("/job-roles",       authenticate, requireAdmin, admin.getAllJobRoles);
+router.get("/job-roles/:id",   authenticate, requireAdmin, admin.getJobRoleById);
+router.put("/job-roles/:id",   authenticate, requireAdmin, admin.updateJobRole);
+router.delete("/job-roles/:id", authenticate, requireAdmin, admin.deleteJobRole);
 
 export default router;
