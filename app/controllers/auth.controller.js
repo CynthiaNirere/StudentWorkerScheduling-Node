@@ -105,6 +105,18 @@ exports.login = async (req, res) => {
       console.warn("UserWorkplace lookup failed:", err.message);
     }
 
+    // ── BEHAVIOR 2: No workplace → blocked / guest ─────────────────────────
+    if (!user.work_location && workplaces.length === 0) {
+      console.log("User has no workplace:", email, "→ blocking login");
+      return res.status(200).send({
+        blocked: true,
+        message: "Your account is not linked to any workplace yet. Ask your supervisor to add you.",
+        email:  user.email,
+        fName:  user.fName,
+        lName:  user.lName,
+      });
+    }
+
     if (workplaces.length > 1) {
       console.log(`User ${email} has ${workplaces.length} workplaces → sending picker`);
       const token     = jwt.sign({ id: user.id }, authconfig.secret, { expiresIn: 86400 });
