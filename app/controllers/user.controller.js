@@ -1,9 +1,9 @@
 import db from "../models/index.js";
 
-const User         = db.user;
+const User          = db.user;
 const UserWorkplace = db.userWorkplace;
 const BusinessArea  = db.businessArea;
-const { Op }       = db.Sequelize;
+const { Op }        = db.Sequelize;
 
 // ── CREATE ────────────────────────────────────────────────────────────────
 export const create = async (req, res) => {
@@ -31,8 +31,9 @@ export const create = async (req, res) => {
     let finalWorkLocation = workLocation;
     if (role === 'employee' && !workLocation && req.user) {
       const requestingUser = await User.findOne({ where: { id: req.user.userId || req.user.id } });
-      if (requestingUser?.work_location) {
-        finalWorkLocation = requestingUser.work_location;
+      // Also check impersonatedLocation for admin-impersonating-employer case
+      finalWorkLocation = req.user?.impersonatedLocation || requestingUser?.work_location || null;
+      if (finalWorkLocation) {
         console.log(`Employee inheriting work_location ${finalWorkLocation} from employer`);
       }
     }
@@ -59,7 +60,7 @@ export const create = async (req, res) => {
     if (finalWorkLocation) {
       try {
         await UserWorkplace.findOrCreate({
-          where: { userId: user.id, locationId: finalWorkLocation },
+          where:    { userId: user.id, locationId: finalWorkLocation },
           defaults: { userId: user.id, locationId: finalWorkLocation, createdAt: Date.now() },
         });
       } catch (e) {
@@ -92,7 +93,6 @@ export const create = async (req, res) => {
 };
 
 // ── SEARCH USERS BY NAME (for "add existing employee" flow) ───────────────
-// Returns users whose name matches the query and are NOT already at this location
 export const searchByName = async (req, res) => {
   try {
     const { q } = req.query;
@@ -104,9 +104,11 @@ export const searchByName = async (req, res) => {
     const requestingUser   = await User.findOne({ where: { id: requestingUserId } });
     if (!requestingUser) return res.status(401).send({ message: "Unauthorized" });
 
-    const currentLocation = requestingUser.work_location;
+    // During impersonation the JWT carries impersonatedLocation — use that
+    // so the search is scoped to the correct workplace
+    const currentLocation = req.user?.impersonatedLocation || requestingUser.work_location;
 
-    // Find users whose first or last name contains the query
+    // Find employees whose name matches the query
     const parts = q.trim().split(/\s+/);
     let whereClause;
     if (parts.length === 1) {
@@ -118,48 +120,44 @@ export const searchByName = async (req, res) => {
         ],
       };
     } else {
-      // Two words — try first+last
       whereClause = {
-        role: 'employee',
+        role:  'employee',
         fName: { [Op.like]: `%${parts[0]}%` },
         lName: { [Op.like]: `%${parts[1]}%` },
       };
     }
 
     const allMatches = await User.findAll({
-      where: whereClause,
+      where:      whereClause,
       attributes: { exclude: ['password_hash'] },
-      limit: 10,
+      limit:      10,
     });
 
-    // Find who is already at this location so we can flag them
+    // Build a set of user IDs already at this location
     let alreadyHere = new Set();
     if (currentLocation && UserWorkplace) {
-      const existing = await UserWorkplace.findAll({
-        where: { locationId: currentLocation },
-      });
+      const existing = await UserWorkplace.findAll({ where: { locationId: currentLocation } });
       existing.forEach(uw => alreadyHere.add(uw.userId));
-      // Also check users whose primary work_location is here
+      // Also catch users whose primary work_location matches
       allMatches.forEach(u => {
         if (u.work_location === currentLocation) alreadyHere.add(u.id);
       });
     }
 
-    const results = allMatches.map(u => ({
-      user_id:          u.id,
-      userId:           u.id,
-      fName:            u.fName,
-      lName:            u.lName,
-      first_name:       u.fName,
-      last_name:        u.lName,
-      email:            u.email,
-      phone_number:     u.phone_number,
-      role:             u.role,
-      work_location:    u.work_location,
+    res.send(allMatches.map(u => ({
+      user_id:           u.id,
+      userId:            u.id,
+      fName:             u.fName,
+      lName:             u.lName,
+      first_name:        u.fName,
+      last_name:         u.lName,
+      email:             u.email,
+      phone_number:      u.phone_number,
+      role:              u.role,
+      work_location:     u.work_location,
       alreadyAtLocation: alreadyHere.has(u.id),
-    }));
+    })));
 
-    res.send(results);
   } catch (err) {
     console.error("searchByName error:", err);
     res.status(500).send({ message: "Error searching users." });
@@ -169,23 +167,25 @@ export const searchByName = async (req, res) => {
 // ── ASSIGN EXISTING USER TO A WORKPLACE (no duplicate user created) ───────
 export const assignToWorkplace = async (req, res) => {
   try {
-    const { userId } = req.params;
+    const { userId }       = req.params;
     const requestingUserId = req.user?.userId || req.user?.id;
     const requestingUser   = await User.findOne({ where: { id: requestingUserId } });
 
-    if (!requestingUser || !['employer', 'admin'].includes(requestingUser.role)) {
+    // Check role — use JWT claim so impersonating admins pass through
+    const callerRole = req.user?.role || requestingUser?.role;
+    if (!requestingUser || !['employer', 'admin'].includes(callerRole)) {
       return res.status(403).send({ message: "Only employers can assign employees to workplaces." });
     }
 
     const targetUser = await User.findOne({ where: { id: userId } });
     if (!targetUser) return res.status(404).send({ message: "User not found." });
 
-    const locationId = requestingUser.work_location;
+    // Use impersonatedLocation for admin-impersonating-employer case
+    const locationId = req.user?.impersonatedLocation || requestingUser.work_location;
     if (!locationId) return res.status(400).send({ message: "Employer has no workplace assigned." });
 
-    // Add to UserWorkplace junction table (idempotent)
-    const [record, created] = await UserWorkplace.findOrCreate({
-      where: { userId: targetUser.id, locationId },
+    const [, created] = await UserWorkplace.findOrCreate({
+      where:    { userId: targetUser.id, locationId },
       defaults: { userId: targetUser.id, locationId, createdAt: Date.now() },
     });
 
@@ -200,16 +200,16 @@ export const assignToWorkplace = async (req, res) => {
     console.log(`User ${targetUser.id} ${created ? 'assigned to' : 'already at'} location ${locationId}`);
 
     res.send({
-      message:  created ? "Employee assigned to your workplace." : "Employee was already at this workplace.",
+      message:        created ? "Employee assigned to your workplace." : "Employee was already at this workplace.",
       alreadyExisted: !created,
-      user_id:       targetUser.id,
-      userId:        targetUser.id,
-      fName:         targetUser.fName,
-      lName:         targetUser.lName,
-      email:         targetUser.email,
-      phone_number:  targetUser.phone_number,
-      role:          targetUser.role,
-      work_location: targetUser.work_location || locationId,
+      user_id:        targetUser.id,
+      userId:         targetUser.id,
+      fName:          targetUser.fName,
+      lName:          targetUser.lName,
+      email:          targetUser.email,
+      phone_number:   targetUser.phone_number,
+      role:           targetUser.role,
+      work_location:  targetUser.work_location || locationId,
     });
 
   } catch (err) {
@@ -225,7 +225,7 @@ export const findAll = async (req, res) => {
     if (!requestingUserId) return res.status(401).send({ message: "Unauthorized" });
 
     const requestingUser = await User.findOne({
-      where: { id: requestingUserId },
+      where:      { id: requestingUserId },
       attributes: { exclude: ['password_hash'] },
     });
     if (!requestingUser) return res.status(404).send({ message: "User not found" });
@@ -234,23 +234,18 @@ export const findAll = async (req, res) => {
 
     let users = [];
 
-    // When an admin is impersonating a workplace the JWT carries role='employer'
-    // in the x-user-role header, but the DB record still has role='admin'.
-    // req.user.role reflects the JWT claim (employer), while requestingUser.role
-    // reflects the DB (admin). We use the JWT claim to decide the view scope,
-    // falling back to DB role for straight admin access.
-    const effectiveRole      = req.user?.role || requestingUser.role;
-    // For impersonation the JWT also carries impersonatedLocation
+    // effectiveRole: JWT claim takes priority over DB value.
+    // During impersonation the JWT says 'employer' even though DB says 'admin'.
+    const effectiveRole        = req.user?.role || requestingUser.role;
     const impersonatedLocation = req.user?.impersonatedLocation || null;
 
     if (effectiveRole === 'employer' || (requestingUser.role === 'admin' && impersonatedLocation)) {
-      // Scope to the impersonated location if present, otherwise use work_location
       const locationId = impersonatedLocation || requestingUser.work_location;
 
       let employeeIds = new Set();
 
       const directMatches = await User.findAll({
-        where: { role: 'employee', work_location: locationId },
+        where:      { role: 'employee', work_location: locationId },
         attributes: ['id'],
       });
       directMatches.forEach(u => employeeIds.add(u.id));
@@ -263,22 +258,22 @@ export const findAll = async (req, res) => {
       if (employeeIds.size === 0) return res.send([]);
 
       users = await User.findAll({
-        where: { id: { [Op.in]: [...employeeIds] }, role: 'employee' },
+        where:      { id: { [Op.in]: [...employeeIds] }, role: 'employee' },
         attributes: { exclude: ['password_hash'] },
       });
 
     } else if (requestingUser.role === 'admin') {
-      // Plain admin (not impersonating) — return all users, optional role filter
+      // Plain admin (not impersonating) — all users, optional role filter
       const roleFilter = req.query.role;
       const condition  = roleFilter ? { role: roleFilter } : {};
       users = await User.findAll({
-        where: condition,
+        where:      condition,
         attributes: { exclude: ['password_hash'] },
       });
 
     } else if (requestingUser.role === 'employee') {
       users = await User.findAll({
-        where: { id: requestingUser.id },
+        where:      { id: requestingUser.id },
         attributes: { exclude: ['password_hash'] },
       });
 
@@ -315,7 +310,7 @@ export const findAll = async (req, res) => {
 export const findOne = async (req, res) => {
   try {
     const user = await User.findOne({
-      where: { id: req.params.id },
+      where:      { id: req.params.id },
       attributes: { exclude: ['password_hash'] },
     });
     if (!user) return res.status(404).send({ message: `User not found with id=${req.params.id}` });
@@ -346,7 +341,7 @@ export const findOne = async (req, res) => {
 export const findByEmail = async (req, res) => {
   try {
     const user = await User.findOne({
-      where: { email: req.params.email },
+      where:      { email: req.params.email },
       attributes: { exclude: ['password_hash'] },
     });
     if (!user) return res.status(404).send({ message: `User not found with email=${req.params.email}` });
@@ -391,8 +386,8 @@ export const update = async (req, res) => {
       updateData.role = req.body.role;
     if (req.body.workLocation !== undefined || req.body.work_location !== undefined)
       updateData.work_location = req.body.workLocation ?? req.body.work_location;
-    if (req.body.age  !== undefined) updateData.age = req.body.age;
-    if (req.body.bio  !== undefined) updateData.bio = req.body.bio;
+    if (req.body.age !== undefined) updateData.age = req.body.age;
+    if (req.body.bio !== undefined) updateData.bio = req.body.bio;
 
     updateData.updatedAt = Date.now();
 
