@@ -40,26 +40,60 @@ exports.login = async (req, res) => {
 
     const now = Date.now();
 
-    // ── LOOK UP USER BY EMAIL ─────────────────────────────────────────────
-    // ✅ NEVER auto-create users — only employers can add people to the system
-    const user = await User.findOne({ where: { email } });
+    // ── Find existing user by email ────────────────────────────────────
+    console.log(`🔍 Looking for user with email: ${email}`);
+    let user = await User.findOne({ where: { email } });
 
     if (!user) {
-      // Unknown Google account — not in our system at all
-      console.log(`Unknown user attempted login: ${email} — not in DB, blocking`);
-      return res.status(200).send({
-        blocked: true,
-        reason:  'not_found',
-        message: "Your account hasn't been added to ShiftBoard yet. Ask your supervisor to add you.",
-        email,
+      console.log(`👤 GUEST USER detected: ${email}`);
+      
+      // Create session for guest
+      const guestToken = jwt.sign(
+        { email, isGuest: true }, 
+        authconfig.secret, 
+        { expiresIn: 86400 }
+      );
+      const expiresAt = now + 86400 * 1000;
+
+      await Session.create({
+        token: guestToken,
+        userId: null, // No user_id for guests
+        createdAt: now,
+        isActive: 1,
+        expiresAt: expiresAt,
+      });
+
+      console.log("✅ Guest session created for:", email);
+      
+      return res.send({
+        userId: null,
+        user_id: null,
+        email: email,
         fName: firstName,
         lName: lastName,
+        first_name: firstName,
+        last_name: lastName,
+        role: 'guest',
+        isGuest: true,
+        work_location: null,
+        token: guestToken,
+        message: "Guest login - not registered in system"
       });
     }
 
-    // ── Update name if changed in Google ─────────────────────────────────
+    // ✅ REGISTERED USER FOUND
+    console.log(`✅ Found registered user:`, {
+      id: user.id,
+      email: user.email,
+      role: user.role,
+      fName: user.fName,
+      lName: user.lName,
+      work_location: user.work_location
+    });
+
     const nameChanged = user.fName !== firstName || user.lName !== lastName;
     if (nameChanged) {
+      console.log(`📝 Updating user name from ${user.fName} ${user.lName} to ${firstName} ${lastName}`);
       await User.update(
         { fName: firstName, lName: lastName, updatedAt: now },
         { where: { id: user.id } }
@@ -147,18 +181,32 @@ exports.login = async (req, res) => {
 
     if (existingSession) {
       if (existingSession.expiresAt && existingSession.expiresAt < now) {
-        await Session.update({ isActive: 0 }, { where: { id: existingSession.id } });
+        console.log("⏰ Session expired, creating new one");
+        await Session.update(
+          { isActive: 0 }, 
+          { where: { id: existingSession.id } }
+        );
       } else {
-        console.log(`Reusing session for ${email}`);
+        console.log("♻️ Returning existing valid session");
         return res.send(buildUserPayload(user, existingSession.token));
       }
     }
 
-    const token     = jwt.sign({ id: user.id }, authconfig.secret, { expiresIn: 86400 });
+    // Create new session for registered user
+    console.log("🆕 Creating new session for user:", user.id);
+    const token = jwt.sign({ id: user.id }, authconfig.secret, { expiresIn: 86400 });
     const expiresAt = now + 86400 * 1000;
     await Session.create({ token, userId: user.id, createdAt: now, isActive: 1, expiresAt });
 
-    console.log(`✅ Login success: ${email} | role: ${user.role} | location: ${user.work_location}`);
+    await Session.create({
+      token,
+      userId: user.id,
+      createdAt: now,
+      isActive: 1,
+      expiresAt: expiresAt,
+    });
+
+    console.log("✅ New session created for", user.email, "role:", user.role);
     return res.send(buildUserPayload(user, token));
 
   } catch (err) {
@@ -171,26 +219,36 @@ exports.login = async (req, res) => {
 };
 
 function buildUserPayload(user, token) {
-  return {
-    userId:        user.id,
-    user_id:       user.id,
-    email:         user.email,
-    fName:         user.fName,
-    lName:         user.lName,
-    first_name:    user.fName,
-    last_name:     user.lName,
-    role:          user.role,
+  const payload = {
+    userId: user.id,
+    user_id: user.id,
+    email: user.email,
+    fName: user.fName,
+    lName: user.lName,
+    first_name: user.fName,
+    last_name: user.lName,
+    role: user.role,
+    isGuest: false,
     work_location: user.work_location,
     token,
   };
+  
+  console.log("📦 Built user payload:", payload);
+  return payload;
 }
 
 exports.logout = async (req, res) => {
   if (!req.body?.token) return res.send({ message: "Already logged out." });
   try {
     const session = await Session.findOne({ where: { token: req.body.token } });
-    if (!session) return res.send({ message: "Already logged out." });
-    await Session.update({ isActive: 0 }, { where: { id: session.id } });
+    if (!session) {
+      return res.send({ message: "Already logged out." });
+    }
+    await Session.update(
+      { isActive: 0 },
+      { where: { id: session.id } }
+    );
+    console.log("✅ Logged out successfully");
     return res.send({ message: "Logged out successfully." });
   } catch (err) {
     console.error("Logout error:", err);
