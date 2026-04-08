@@ -128,7 +128,11 @@ export const findOne = async (req, res) => {
 // ── CLOCK IN ──────────────────────────────────────────────────────────────
 export const clockIn = async (req, res) => {
   try {
-    const userId  = getUserId(req);
+    // Kiosk mode: employer can clock in on behalf of an employee
+    const requestingRole = req.user?.role;
+    const userId = (requestingRole === 'employer' && req.body.userId)
+      ? req.body.userId
+      : getUserId(req);
     const shiftId = req.body.shiftId || req.body.shift_id;
 
     if (!shiftId) return res.status(400).send({ message: "shiftId is required." });
@@ -155,7 +159,11 @@ export const clockIn = async (req, res) => {
 // ── CLOCK OUT ─────────────────────────────────────────────────────────────
 export const clockOut = async (req, res) => {
   try {
-    const userId = getUserId(req);
+    // Kiosk mode: employer can clock out on behalf of an employee
+    const requestingRole = req.user?.role;
+    const userId = (requestingRole === 'employer' && req.body.userId)
+      ? req.body.userId
+      : getUserId(req);
 
     const record = await Clock.findOne({ where: { userId, status: 'clocked_in' } });
     if (!record) return res.status(404).send({ message: "No active clock-in found." });

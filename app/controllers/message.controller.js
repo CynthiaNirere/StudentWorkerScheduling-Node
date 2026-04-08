@@ -172,9 +172,17 @@ export const markAsRead = async (req, res) => {
 // ── DELETE ────────────────────────────────────────────────────────────────
 export const remove = async (req, res) => {
   try {
-    const deleted = await Message.destroy({ where: { message_id: req.params.id } });
-    if (deleted) res.send({ message: "Message deleted successfully!" });
-    else res.status(404).send({ message: "Message not found!" });
+    const messageId = parseInt(req.params.id, 10);
+    if (isNaN(messageId)) return res.status(400).send({ message: "Invalid message ID!" });
+
+    const userId = getSenderId(req);
+    const [result] = await db.sequelize.query(
+      'DELETE FROM Message WHERE message_id = ? AND (sender_id = ? OR recipient_id = ? OR recipient_id IS NULL)',
+      { replacements: [messageId, userId, userId], type: db.Sequelize.QueryTypes.RAW }
+    );
+    const affectedRows = result?.affectedRows ?? result;
+    if (affectedRows) res.send({ message: "Message deleted successfully!" });
+    else res.status(404).send({ message: "Message not found or not authorized!" });
   } catch (err) {
     console.error("Error deleting message:", err);
     res.status(500).send({ message: "Error deleting message." });
