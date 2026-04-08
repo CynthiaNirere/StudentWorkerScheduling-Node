@@ -12,7 +12,7 @@ const Session = sequelize.define(
     },
     userId: {
       type: DataTypes.STRING(255),
-      allowNull: false,
+      allowNull: true, // ✅ CHANGED: Allow NULL for guest users
       field: "user_id",
     },
     token: {

@@ -1,9 +1,9 @@
 import express from "express";
 import cors from "cors";
-import cron from 'node-cron';  // ✅ ADD THIS IMPORT
+import cron from 'node-cron';
 import db from "./app/models/index.js";
 import routes from "./app/routes/index.js";
-import { resetDailyTasks } from './app/jobs/dailyTaskReset.js';  // ✅ ADD THIS IMPORT
+import { resetDailyTasks } from './app/jobs/dailyTaskReset.js';
 
 const app = express();
 
@@ -13,15 +13,31 @@ const corsOptions = {
     "http://localhost:8081",
     "http://localhost:5173",
     "https://workerscheduling.eaglesoftwareteam.com",
-    "https://workerscheduling.eaglesoftwareteam.com:3131",
+    "https://workerscheduling-t1.eaglesoftwareteam.com",
     "https://project3.eaglesoftwareteam.com"
   ],
   methods: ['GET', 'POST', 'PUT', 'DELETE', 'PATCH', 'OPTIONS'],
+<<<<<<< HEAD
   allowedHeaders: ["Content-Type", "Authorization", "x-requested-with", "x-demo-mode", "x-user-id", "x-user-email", "x-user-role"],
+=======
+  allowedHeaders: [
+    "Content-Type",
+    "Authorization",
+    "x-requested-with",
+    "x-demo-mode",
+    "x-user-id",
+    "x-user-email",
+    "x-user-role"
+  ],
+>>>>>>> 64cc8bf004f50b2775303586b2ad550bb17e3732
   credentials: true,
+  optionsSuccessStatus: 200
 };
 
 app.use(cors(corsOptions));
+
+// Handle preflight OPTIONS requests for all routes
+app.options('*', cors(corsOptions));
 
 // Body Parsers
 app.use(express.json());
@@ -35,7 +51,7 @@ app.use((req, res, next) => {
 
 // ROOT ROUTE - API Health Check
 app.get("/", (req, res) => {
-  res.json({ 
+  res.json({
     message: "Worker Scheduling API is running!",
     version: "1.0.0",
     timestamp: new Date().toISOString(),
@@ -50,16 +66,13 @@ app.get("/", (req, res) => {
   });
 });
 
-// API Routes - ALL routes from index.js
+// API Routes
 app.use("/workerscheduling-t1/api", routes);
 
-// ============================================
-// ✅ CRON JOB SETUP - ADD THIS SECTION HERE
-// ============================================
+// ── CRON JOB SETUP ────────────────────────────────────────────────────────
 
 console.log("⏰ Setting up daily task reset cron job...");
 
-// Run at midnight (00:00) every day - Central Time
 cron.schedule('0 0 * * *', async () => {
   console.log('\n🕐 Midnight - Running daily task reset...');
   try {
@@ -68,7 +81,7 @@ cron.schedule('0 0 * * *', async () => {
     console.error('❌ Cron job failed:', err);
   }
 }, {
-  timezone: "America/Chicago"  // Change to your timezone if needed
+  timezone: "America/Chicago"
 });
 
 console.log("✅ Daily task reset cron job scheduled for midnight CST");
@@ -78,25 +91,22 @@ app.post('/workerscheduling-t1/api/admin/trigger-task-reset', async (req, res) =
   try {
     console.log('🔧 Manual task reset triggered by admin');
     const result = await resetDailyTasks();
-    res.json({ 
-      success: true, 
+    res.json({
+      success: true,
       message: 'Task reset completed successfully',
       result
     });
   } catch (err) {
     console.error('Manual reset failed:', err);
-    res.status(500).json({ 
-      success: false, 
-      message: err.message 
+    res.status(500).json({
+      success: false,
+      message: err.message
     });
   }
 });
 
-// ============================================
-// END CRON JOB SETUP
-// ============================================
+// ── 404 Handler ───────────────────────────────────────────────────────────
 
-// 404 Handler
 app.use((req, res) => {
   res.status(404).json({
     message: "Route not found",
@@ -111,7 +121,8 @@ app.use((req, res) => {
   });
 });
 
-// Error Handler
+// ── Error Handler ─────────────────────────────────────────────────────────
+
 app.use((err, req, res, next) => {
   console.error("❌ Server Error:", err);
   res.status(err.status || 500).json({
@@ -120,11 +131,11 @@ app.use((err, req, res, next) => {
   });
 });
 
-// Database Sync & Server Start
+// ── Database Sync & Server Start ──────────────────────────────────────────
+
 const PORT = process.env.PORT || 3131;
 
 if (process.env.NODE_ENV !== "test") {
-  // Sync database then start server
   db.sequelize.sync({ alter: false })
     .then(() => {
       console.log("✅ Database synced");

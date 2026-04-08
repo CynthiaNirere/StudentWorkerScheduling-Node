@@ -13,18 +13,16 @@ export default (sequelize, Sequelize) => {
     },
     recipientId: {
       type: Sequelize.STRING(255),
-      allowNull: true, // NULL for broadcast messages
+      allowNull: true,
       field: 'recipient_id'
     },
     subject: {
       type: Sequelize.STRING(255),
       allowNull: true,
-      field: 'subject'
     },
     message: {
       type: Sequelize.TEXT,
       allowNull: false,
-      field: 'message'
     },
     messageType: {
       type: Sequelize.STRING(50),
@@ -35,6 +33,17 @@ export default (sequelize, Sequelize) => {
       type: Sequelize.TEXT,
       allowNull: true,
       field: 'link_url'
+    },
+    // ✅ threadId groups messages into a conversation thread
+    threadId: {
+      type: Sequelize.STRING(255),
+      allowNull: true,
+      field: 'thread_id'
+    },
+    parentMessageId: {
+      type: Sequelize.INTEGER,
+      allowNull: true,
+      field: 'parent_message_id'
     },
     isRead: {
       type: Sequelize.BOOLEAN,

@@ -1,248 +1,187 @@
 import db from "../models/index.js";
 
 const TaskListItem = db.taskListItem;
-const TaskList = db.taskList;
+const TaskList     = db.taskList;
 
-// Get all task list items
+// ── GET ALL (optionally filtered by tasklistId) ───────────────────────────
 export const findAll = async (req, res) => {
   try {
-    const { tasklistId } = req.query;
-    
-    let condition = {};
-    if (tasklistId) {
-      condition.tasklistId = tasklistId;
+    const condition = {};
+    if (req.query.tasklistId || req.query.tasklist_id) {
+      condition.tasklistId = req.query.tasklistId || req.query.tasklist_id;
     }
-    
+
     const items = await TaskListItem.findAll({
       where: condition,
-      include: [
-        {
-          model: TaskList,
-          as: 'taskList',
-          attributes: ['tasklist_id', 'title', 'description']
-        }
-      ],
-      order: [['order', 'ASC']]
+      include: [{
+        model: TaskList,
+        as: 'taskList',
+        attributes: ['id', 'tasklist_id', 'title', 'description'],
+        required: false,
+      }],
+      order: [['orderPosition', 'ASC']],  // ✅ maps to order_position column
     });
-    
+
     res.send(items);
   } catch (err) {
     console.error("Error retrieving task list items:", err);
-    res.status(500).send({
-      message: err.message || "Error retrieving task list items."
-    });
+    res.status(500).send({ message: "Error retrieving task list items." });
   }
 };
 
-// Get task list items by tasklist ID
+// ── GET BY TASKLIST ID ────────────────────────────────────────────────────
 export const findByTaskList = async (req, res) => {
   try {
-    const tasklistId = req.params.tasklistId;
-    
+    const tasklistId = req.params.tasklistId || req.params.id;
+
     const items = await TaskListItem.findAll({
-      where: { tasklistId: tasklistId },
-      order: [['order', 'ASC']]
+      where: { tasklistId },
+      order: [['orderPosition', 'ASC']],  // ✅ fixed
     });
-    
+
     res.send(items);
   } catch (err) {
     console.error("Error retrieving items for task list:", err);
-    res.status(500).send({
-      message: err.message || "Error retrieving items."
-    });
+    res.status(500).send({ message: "Error retrieving task list items." });
   }
 };
 
-// Get single task list item
+// ── GET ONE ───────────────────────────────────────────────────────────────
 export const findOne = async (req, res) => {
   try {
-    const id = req.params.id;
-    
-    const item = await TaskListItem.findByPk(id, {
-      include: [
-        {
-          model: TaskList,
-          as: 'taskList',
-          attributes: ['tasklist_id', 'title', 'description']
-        }
-      ]
+    const item = await TaskListItem.findByPk(req.params.id, {
+      include: [{
+        model: TaskList,
+        as: 'taskList',
+        attributes: ['id', 'tasklist_id', 'title', 'description'],
+        required: false,
+      }],
     });
-    
-    if (!item) {
-      return res.status(404).send({
-        message: `Task list item not found with id=${id}`
-      });
-    }
-    
+    if (!item) return res.status(404).send({ message: "Task item not found." });
     res.send(item);
   } catch (err) {
-    console.error("Error retrieving task list item:", err);
-    res.status(500).send({
-      message: "Error retrieving task list item."
-    });
+    console.error("Error retrieving task item:", err);
+    res.status(500).send({ message: "Error retrieving task item." });
   }
 };
 
-// Create a new task list item
+// ── CREATE ────────────────────────────────────────────────────────────────
 export const create = async (req, res) => {
   try {
-    const { tasklistId, title, description, order } = req.body;
-    
-    if (!tasklistId || !title) {
-      return res.status(400).send({
-        message: "tasklistId and title are required!"
+    const {
+      tasklistId, tasklist_id,
+      title, description,
+      assignedTo, assigned_to,
+      status,
+      orderPosition, order_position,
+      shiftId, shift_id,
+      assignedDate, assigned_date,
+    } = req.body;
+
+    const listId = tasklistId || tasklist_id;
+    if (!listId) return res.status(400).send({ message: "tasklistId is required." });
+    if (!title)  return res.status(400).send({ message: "title is required." });
+
+    // Auto-position: place at end if not provided
+    let pos = orderPosition || order_position;
+    if (!pos) {
+      const last = await TaskListItem.findOne({
+        where: { tasklistId: listId },
+        order: [['orderPosition', 'DESC']],  // ✅ fixed
       });
+      pos = last ? (last.orderPosition || 0) + 1 : 1;
     }
-    
-    // If no order provided, get the max order + 1
-    let itemOrder = order;
-    if (!itemOrder) {
-      const maxItem = await TaskListItem.findOne({
-        where: { tasklistId },
-        order: [['order', 'DESC']]
-      });
-      itemOrder = maxItem ? maxItem.order + 1 : 1;
-    }
-    
+
     const item = await TaskListItem.create({
-      tasklistId,
+      tasklistId:    listId,
       title,
-      description: description || null,
-      order: itemOrder,
-      status: 'active',
-      completedAt: null,
-      shiftId: req.body.shiftId || null,
-      assignedDate: req.body.assignedDate || null,
-      createdAt: Date.now()
+      description:   description  || null,
+      assignedTo:    assignedTo   || assigned_to   || null,
+      status:        status       || 'active',
+      orderPosition: pos,
+      shiftId:       shiftId      || shift_id      || null,
+      assignedDate:  assignedDate || assigned_date || null,
+      completedAt:   null,
+      createdAt:     Date.now(),
+      updatedAt:     null,
     });
-    
+
     res.status(201).send(item);
   } catch (err) {
-    console.error("Error creating task list item:", err);
-    res.status(500).send({
-      message: err.message || "Error creating task list item."
-    });
+    console.error("Error creating task item:", err);
+    res.status(500).send({ message: "Error creating task item." });
   }
 };
 
-// Update a task list item
+// ── UPDATE ────────────────────────────────────────────────────────────────
 export const update = async (req, res) => {
   try {
-    const id = req.params.id;
-    
-    const item = await TaskListItem.findByPk(id);
-    if (!item) {
-      return res.status(404).send({
-        message: `Task list item not found with id=${id}`
-      });
-    }
-    
-    const updateData = {};
-    if (req.body.title !== undefined) updateData.title = req.body.title;
-    if (req.body.description !== undefined) updateData.description = req.body.description;
-    if (req.body.status !== undefined) updateData.status = req.body.status;
-    if (req.body.order !== undefined) updateData.order = req.body.order;
-    if (req.body.shiftId !== undefined) updateData.shiftId = req.body.shiftId;
-    if (req.body.assignedDate !== undefined) updateData.assignedDate = req.body.assignedDate;
-    if (req.body.completedAt !== undefined) updateData.completedAt = req.body.completedAt;
-    
-    updateData.updatedAt = Date.now();
-    
-    await item.update(updateData);
-    
-    res.send({
-      message: "Task list item updated successfully.",
-      item
-    });
+    const item = await TaskListItem.findByPk(req.params.id);
+    if (!item) return res.status(404).send({ message: "Task item not found." });
+
+    const allowed = ['title','description','status','completedBy','completedAt',
+                     'assignedTo','orderPosition','shiftId','assignedDate'];
+    const data = {};
+    allowed.forEach(k => { if (req.body[k] !== undefined) data[k] = req.body[k]; });
+    data.updatedAt = Date.now();
+
+    await item.update(data);
+    res.send(item);
   } catch (err) {
-    console.error("Error updating task list item:", err);
-    res.status(500).send({
-      message: "Error updating task list item."
-    });
+    console.error("Error updating task item:", err);
+    res.status(500).send({ message: "Error updating task item." });
   }
 };
 
-// Delete a task list item
-export const remove = async (req, res) => {
-  try {
-    const id = req.params.id;
-    
-    const item = await TaskListItem.findByPk(id);
-    if (!item) {
-      return res.status(404).send({
-        message: `Task list item not found.`
-      });
-    }
-    
-    await item.destroy();
-    
-    res.send({
-      message: "Task list item deleted successfully."
-    });
-  } catch (err) {
-    console.error("Error deleting task list item:", err);
-    res.status(500).send({
-      message: err.message || "Error deleting task list item."
-    });
-  }
-};
-
-// Mark item as complete
+// ── COMPLETE ──────────────────────────────────────────────────────────────
 export const complete = async (req, res) => {
   try {
-    const id = req.params.id;
-    
-    const item = await TaskListItem.findByPk(id);
-    if (!item) {
-      return res.status(404).send({
-        message: `Task list item not found.`
-      });
-    }
-    
+    const item = await TaskListItem.findByPk(req.params.id);
+    if (!item) return res.status(404).send({ message: "Task item not found." });
+
+    const completedBy = req.user?.userId || req.user?.user_id || req.user?.id;
     await item.update({
       status: 'completed',
+      completedBy,
       completedAt: Date.now(),
-      updatedAt: Date.now()
+      updatedAt:   Date.now(),
     });
-    
-    res.send({
-      message: "Task list item marked as complete.",
-      item
-    });
+
+    res.send(item);
   } catch (err) {
-    console.error("Error completing task list item:", err);
-    res.status(500).send({
-      message: err.message || "Error completing task list item."
-    });
+    console.error("Error completing task item:", err);
+    res.status(500).send({ message: "Error completing task item." });
   }
 };
 
-// Reorder items
+// ── REORDER ───────────────────────────────────────────────────────────────
 export const reorder = async (req, res) => {
   try {
     const { items } = req.body;
-    
-    if (!items || !Array.isArray(items)) {
-      return res.status(400).send({
-        message: "Items array is required!"
-      });
-    }
-    
-    // Update order for each item
-    for (const itemData of items) {
+    if (!Array.isArray(items)) return res.status(400).send({ message: "items array is required." });
+
+    for (const { item_id, orderPosition } of items) {
       await TaskListItem.update(
-        { order: itemData.order, updatedAt: Date.now() },
-        { where: { item_id: itemData.item_id } }
+        { orderPosition, updatedAt: Date.now() },
+        { where: { id: item_id } }
       );
     }
-    
-    res.send({
-      message: "Items reordered successfully."
-    });
+
+    res.send({ message: "Items reordered successfully." });
   } catch (err) {
     console.error("Error reordering items:", err);
-    res.status(500).send({
-      message: err.message || "Error reordering items."
-    });
+    res.status(500).send({ message: "Error reordering items." });
+  }
+};
+
+// ── DELETE ────────────────────────────────────────────────────────────────
+export const remove = async (req, res) => {
+  try {
+    const deleted = await TaskListItem.destroy({ where: { id: req.params.id } });
+    if (!deleted) return res.status(404).send({ message: "Task item not found." });
+    res.send({ message: "Task item deleted successfully." });
+  } catch (err) {
+    console.error("Error deleting task item:", err);
+    res.status(500).send({ message: "Error deleting task item." });
   }
 };

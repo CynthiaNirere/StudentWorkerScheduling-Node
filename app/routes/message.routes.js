@@ -4,13 +4,16 @@ import authenticate from "../authorization/authorization.js";
 
 const router = express.Router();
 
-// ✅ Message operations
-router.post("/", authenticate, message.send);
-router.post("/broadcast", authenticate, message.broadcast);
-router.get("/inbox", authenticate, message.getInbox);
-router.get("/sent", authenticate, message.getSentMessages);
-router.get("/unread-count", authenticate, message.getUnreadCount);
-router.put("/:id/read", authenticate, message.markAsRead);
-router.delete("/:id", authenticate, message.remove);
+router.post("/",             authenticate, message.send);
+router.post("/broadcast",    authenticate, message.broadcast);
+router.get("/inbox",         authenticate, message.getInbox);
+router.get("/sent",          authenticate, message.getSentMessages);
+router.get("/unread-count",  authenticate, message.getUnreadCount);
+router.put("/:id/read",      authenticate, message.markAsRead);
+router.delete("/:id",        authenticate, message.remove);
+
+// getConversations and getThread are not implemented — keep commented
+// router.get("/conversations", authenticate, message.getConversations);
+// router.get("/:id/thread",    authenticate, message.getThread);
 
 export default router;
