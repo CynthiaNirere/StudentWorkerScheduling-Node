@@ -232,10 +232,21 @@ export const removeFromWorkplace = async (req, res) => {
     const locationId = req.user?.impersonatedLocation || requestingUser.work_location;
     if (!locationId) return res.status(400).send({ message: "Employer has no workplace assigned." });
 
+    const targetUser = await User.findOne({ where: { id: userId } });
+
+    // If the user has a primary work_location that is DIFFERENT from the one being removed,
+    // ensure a UserWorkplace record exists for it so they are not lost when the pointer moves.
+    if (targetUser && targetUser.work_location && targetUser.work_location !== locationId) {
+      await UserWorkplace.findOrCreate({
+        where: { userId, locationId: targetUser.work_location },
+        defaults: { userId, locationId: targetUser.work_location, createdAt: Date.now() },
+      });
+    }
+
     await UserWorkplace.destroy({ where: { userId, locationId } });
 
-    const targetUser = await User.findOne({ where: { id: userId } });
-    if (targetUser && targetUser.work_location === locationId) {
+    const refreshed = await User.findOne({ where: { id: userId } });
+    if (refreshed && refreshed.work_location === locationId) {
       const remaining = await UserWorkplace.findAll({ where: { userId } });
       const newLocation = remaining.length > 0 ? remaining[0].locationId : null;
       await User.update({ work_location: newLocation, updatedAt: Date.now() }, { where: { id: userId } });
