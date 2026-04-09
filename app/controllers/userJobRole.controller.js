@@ -36,12 +36,26 @@ export const addRoleToUser = async (req, res) => {
       return res.status(400).send({ message: "User already has this role!" });
     }
     
-    // If isPrimary is true, set all other roles to non-primary
-    if (isPrimary) {
-      await UserJobRole.update(
-        { isPrimary: false },
-        { where: { userId } }
-      );
+    // If isPrimary is true, clear primary only for roles at the SAME location
+    if (isPrimary && role.location_id) {
+      const rolesAtLocation = await UserJobRole.findAll({
+        where: { userId },
+        include: [{
+          model: JobRole,
+          as: 'jobRole',
+          where: { location_id: role.location_id },
+          required: true,
+        }],
+      });
+      const idsAtLocation = rolesAtLocation.map(r => r.user_job_role_id);
+      if (idsAtLocation.length > 0) {
+        await UserJobRole.update(
+          { isPrimary: false },
+          { where: { user_job_role_id: idsAtLocation } }
+        );
+      }
+    } else if (isPrimary) {
+      await UserJobRole.update({ isPrimary: false }, { where: { userId } });
     }
     
     const userJobRole = await UserJobRole.create({
