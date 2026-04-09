@@ -24,6 +24,43 @@ export const create = async (req, res) => {
 
     const existingUser = await User.findOne({ where: { email } });
     if (existingUser) {
+      // ✅ FIX: Instead of rejecting with 400, auto-assign the existing employee
+      // to this workplace. This handles the case where employer types details of
+      // someone already in the system via the manual form.
+      if (role === 'employee' || existingUser.role === 'employee') {
+        const reqUser    = await User.findOne({ where: { id: req.user?.userId || req.user?.id } });
+        const locationId = req.user?.impersonatedLocation || reqUser?.work_location;
+
+        if (locationId) {
+          try {
+            await UserWorkplace.findOrCreate({
+              where:    { userId: existingUser.id, locationId },
+              defaults: { userId: existingUser.id, locationId, createdAt: Date.now() },
+            });
+            if (!existingUser.work_location) {
+              await User.update(
+                { work_location: locationId, updatedAt: Date.now() },
+                { where: { id: existingUser.id } }
+              );
+            }
+          } catch (e) { console.warn("Auto-assign skipped:", e.message); }
+
+          return res.status(200).send({
+            message:        "User already exists — assigned to your workplace.",
+            alreadyExisted: true,
+            user_id:        existingUser.id,
+            userId:         existingUser.id,
+            first_name:     existingUser.fName,
+            last_name:      existingUser.lName,
+            fName:          existingUser.fName,
+            lName:          existingUser.lName,
+            email:          existingUser.email,
+            phone_number:   existingUser.phone_number,
+            role:           existingUser.role,
+            work_location:  existingUser.work_location || locationId,
+          });
+        }
+      }
       return res.status(400).send({ message: "Email already exists" });
     }
 
@@ -31,7 +68,6 @@ export const create = async (req, res) => {
     let finalWorkLocation = workLocation;
     if (role === 'employee' && !workLocation && req.user) {
       const requestingUser = await User.findOne({ where: { id: req.user.userId || req.user.id } });
-      // Also check impersonatedLocation for admin-impersonating-employer case
       finalWorkLocation = req.user?.impersonatedLocation || requestingUser?.work_location || null;
       if (finalWorkLocation) {
         console.log(`Employee inheriting work_location ${finalWorkLocation} from employer`);
@@ -56,7 +92,6 @@ export const create = async (req, res) => {
       updatedAt:     null,
     });
 
-    // Also add a UserWorkplace record so multi-location logic works
     if (finalWorkLocation) {
       try {
         await UserWorkplace.findOrCreate({
@@ -92,7 +127,7 @@ export const create = async (req, res) => {
   }
 };
 
-// ── SEARCH USERS BY NAME (for "add existing employee" flow) ───────────────
+// ── SEARCH USERS BY NAME ──────────────────────────────────────────────────
 export const searchByName = async (req, res) => {
   try {
     const { q } = req.query;
@@ -104,11 +139,9 @@ export const searchByName = async (req, res) => {
     const requestingUser   = await User.findOne({ where: { id: requestingUserId } });
     if (!requestingUser) return res.status(401).send({ message: "Unauthorized" });
 
-    // During impersonation the JWT carries impersonatedLocation — use that
-    // so the search is scoped to the correct workplace
+    // ✅ FIX: Use impersonatedLocation during admin impersonation
     const currentLocation = req.user?.impersonatedLocation || requestingUser.work_location;
 
-    // Find employees whose name matches the query
     const parts = q.trim().split(/\s+/);
     let whereClause;
     if (parts.length === 1) {
@@ -133,12 +166,10 @@ export const searchByName = async (req, res) => {
       limit:      10,
     });
 
-    // Build a set of user IDs already at this location
     let alreadyHere = new Set();
     if (currentLocation && UserWorkplace) {
       const existing = await UserWorkplace.findAll({ where: { locationId: currentLocation } });
       existing.forEach(uw => alreadyHere.add(uw.userId));
-      // Also catch users whose primary work_location matches
       allMatches.forEach(u => {
         if (u.work_location === currentLocation) alreadyHere.add(u.id);
       });
@@ -164,14 +195,14 @@ export const searchByName = async (req, res) => {
   }
 };
 
-// ── ASSIGN EXISTING USER TO A WORKPLACE (no duplicate user created) ───────
+// ── ASSIGN EXISTING USER TO A WORKPLACE ───────────────────────────────────
 export const assignToWorkplace = async (req, res) => {
   try {
     const { userId }       = req.params;
     const requestingUserId = req.user?.userId || req.user?.id;
     const requestingUser   = await User.findOne({ where: { id: requestingUserId } });
 
-    // Check role — use JWT claim so impersonating admins pass through
+    // ✅ FIX: Use JWT claim role so impersonating admins pass through
     const callerRole = req.user?.role || requestingUser?.role;
     if (!requestingUser || !['employer', 'admin'].includes(callerRole)) {
       return res.status(403).send({ message: "Only employers can assign employees to workplaces." });
@@ -180,7 +211,7 @@ export const assignToWorkplace = async (req, res) => {
     const targetUser = await User.findOne({ where: { id: userId } });
     if (!targetUser) return res.status(404).send({ message: "User not found." });
 
-    // Use impersonatedLocation for admin-impersonating-employer case
+    // ✅ FIX: Use impersonatedLocation for admin-impersonating-employer case
     const locationId = req.user?.impersonatedLocation || requestingUser.work_location;
     if (!locationId) return res.status(400).send({ message: "Employer has no workplace assigned." });
 
@@ -189,7 +220,6 @@ export const assignToWorkplace = async (req, res) => {
       defaults: { userId: targetUser.id, locationId, createdAt: Date.now() },
     });
 
-    // If user has no primary work_location yet, set it
     if (!targetUser.work_location) {
       await User.update(
         { work_location: locationId, updatedAt: Date.now() },
@@ -234,8 +264,6 @@ export const findAll = async (req, res) => {
 
     let users = [];
 
-    // effectiveRole: JWT claim takes priority over DB value.
-    // During impersonation the JWT says 'employer' even though DB says 'admin'.
     const effectiveRole        = req.user?.role || requestingUser.role;
     const impersonatedLocation = req.user?.impersonatedLocation || null;
 
@@ -263,7 +291,6 @@ export const findAll = async (req, res) => {
       });
 
     } else if (requestingUser.role === 'admin') {
-      // Plain admin (not impersonating) — all users, optional role filter
       const roleFilter = req.query.role;
       const condition  = roleFilter ? { role: roleFilter } : {};
       users = await User.findAll({
