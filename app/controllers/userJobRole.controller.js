@@ -120,30 +120,48 @@ export const removeRoleFromUser = async (req, res) => {
   }
 };
 
-// ✅ Set primary role
+// ✅ Set primary role (scoped to the employer's workplace so other workplaces are unaffected)
 export const setPrimaryRole = async (req, res) => {
   try {
-    const userId = req.params.userId;
+    const userId    = req.params.userId;
     const jobRoleId = req.params.roleId;
-    
-    // Set all roles to non-primary
-    await UserJobRole.update(
-      { isPrimary: false },
-      { where: { userId } }
-    );
-    
+    const locationId = req.workLocation || null;
+
+    if (locationId) {
+      // Find only the UserJobRole records that belong to this location
+      const rolesAtLocation = await UserJobRole.findAll({
+        where: { userId },
+        include: [{
+          model: JobRole,
+          as: 'jobRole',
+          where: { location_id: locationId },
+          required: true,
+        }],
+      });
+      const idsAtLocation = rolesAtLocation.map(r => r.user_job_role_id);
+      if (idsAtLocation.length > 0) {
+        await UserJobRole.update(
+          { isPrimary: false },
+          { where: { user_job_role_id: idsAtLocation } }
+        );
+      }
+    } else {
+      // Fallback: no location context, clear all
+      await UserJobRole.update({ isPrimary: false }, { where: { userId } });
+    }
+
     // Set specified role as primary
     const [updated] = await UserJobRole.update(
       { isPrimary: true },
       { where: { userId, jobRoleId } }
     );
-    
+
     if (updated === 1) {
       res.send({ message: "Primary role updated successfully!" });
     } else {
       res.status(404).send({ message: "User role not found!" });
     }
-    
+
   } catch (err) {
     console.error("❌ Error setting primary role:", err);
     res.status(500).send({ message: "Error setting primary role." });
