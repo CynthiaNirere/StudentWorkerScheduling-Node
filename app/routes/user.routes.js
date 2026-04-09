@@ -11,6 +11,9 @@ router.get("/search", authenticate, users.searchByName);
 // Assign an existing user to the employer's workplace (no new record created)
 router.post("/:userId/assign", authenticate, users.assignToWorkplace);
 
+// Remove an employee from the employer's workplace only (does not delete the user)
+router.delete("/:userId/workplace", authenticate, users.removeFromWorkplace);
+
 // Specific routes FIRST (before /:id)
 router.get("/email/:email", authenticate, users.findByEmail);
 

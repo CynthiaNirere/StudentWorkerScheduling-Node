@@ -218,6 +218,37 @@ export const assignToWorkplace = async (req, res) => {
   }
 };
 
+// ── REMOVE FROM WORKPLACE (soft remove — does not delete the user) ────────
+export const removeFromWorkplace = async (req, res) => {
+  try {
+    const { userId } = req.params;
+    const requestingUserId = req.user?.userId || req.user?.id;
+    const requestingUser   = await User.findOne({ where: { id: requestingUserId } });
+
+    if (!requestingUser || !['employer', 'admin'].includes(requestingUser.role)) {
+      return res.status(403).send({ message: "Only employers can remove employees from workplaces." });
+    }
+
+    const locationId = req.user?.impersonatedLocation || requestingUser.work_location;
+    if (!locationId) return res.status(400).send({ message: "Employer has no workplace assigned." });
+
+    await UserWorkplace.destroy({ where: { userId, locationId } });
+
+    const targetUser = await User.findOne({ where: { id: userId } });
+    if (targetUser && targetUser.work_location === locationId) {
+      const remaining = await UserWorkplace.findAll({ where: { userId } });
+      const newLocation = remaining.length > 0 ? remaining[0].locationId : null;
+      await User.update({ work_location: newLocation, updatedAt: Date.now() }, { where: { id: userId } });
+    }
+
+    console.log(`User ${userId} removed from workplace ${locationId}`);
+    res.send({ message: "Employee removed from workplace.", userId });
+  } catch (err) {
+    console.error("removeFromWorkplace error:", err);
+    res.status(500).send({ message: "Error removing employee from workplace." });
+  }
+};
+
 // ── FIND ALL (scoped by role / workplace) ─────────────────────────────────
 export const findAll = async (req, res) => {
   try {
