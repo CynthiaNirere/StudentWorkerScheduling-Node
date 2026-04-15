@@ -5,7 +5,6 @@ const UserWorkplace = db.userWorkplace;
 const BusinessArea  = db.businessArea;
 const { Op }        = db.Sequelize;
 
-// ── CREATE ────────────────────────────────────────────────────────────────
 export const create = async (req, res) => {
   try {
     const firstName    = req.body.firstName  || req.body.first_name || req.body.fName;
@@ -247,7 +246,6 @@ export const assignToWorkplace = async (req, res) => {
   }
 };
 
-// ── REMOVE FROM WORKPLACE ─────────────────────────────────────────────────
 export const removeFromWorkplace = async (req, res) => {
   try {
     const { userId }       = req.params;
@@ -295,12 +293,7 @@ export const removeFromWorkplace = async (req, res) => {
   }
 };
 
-// ── FIND ALL (scoped by workplace) ────────────────────────────────────────
-// Strategy:
-// 1. First check UserWorkplace table for active rows at this location
-// 2. Also include employees whose work_location field matches (handles seeded users
-//    who were inserted directly without a UserWorkplace row)
-// 3. Exclude anyone who has been soft-deleted (terminated_at IS NOT NULL at this location)
+
 export const findAll = async (req, res) => {
   try {
     const requestingUserId = req.user?.userId || req.user?.id;
@@ -328,15 +321,12 @@ export const findAll = async (req, res) => {
       });
       const activeViaWorkplaceTable = new Set(activeRecords.map(r => r.userId));
 
-      // ── Step 2: Get IDs that were soft-deleted at this location ────────
-      // These should be EXCLUDED even if their work_location field still matches
+      
       const terminatedRecords = await UserWorkplace.findAll({
         where: { locationId, isActive: 0 },
       });
       const terminatedIds = new Set(terminatedRecords.map(r => r.userId));
 
-      // ── Step 3: Also find employees whose work_location = this location
-      // but have no UserWorkplace row at all (seeded / legacy users)
       const legacyUsers = await User.findAll({
         where: {
           role:          'employee',
@@ -413,7 +403,6 @@ export const findAll = async (req, res) => {
   }
 };
 
-// ── FIND ONE ──────────────────────────────────────────────────────────────
 export const findOne = async (req, res) => {
   try {
     const user = await User.findOne({
@@ -458,7 +447,6 @@ export const updateCertifications = async (req, res) => {
   }
 };
 
-// ── FIND BY EMAIL ─────────────────────────────────────────────────────────
 export const findByEmail = async (req, res) => {
   try {
     const user = await User.findOne({
@@ -488,7 +476,6 @@ export const findByEmail = async (req, res) => {
   }
 };
 
-// ── UPDATE ────────────────────────────────────────────────────────────────
 export const update = async (req, res) => {
   try {
     const userId     = req.params.id;
@@ -538,7 +525,6 @@ export const update = async (req, res) => {
   }
 };
 
-// ── HARD DELETE (admin only) ──────────────────────────────────────────────
 export const remove = async (req, res) => {
   const userId = req.params.id;
 
