@@ -34,7 +34,6 @@ export const create = async (req, res) => {
               where:    { userId: existingUser.id, locationId },
               defaults: { userId: existingUser.id, locationId, isActive: 1, createdAt: Date.now() },
             });
-            // ✅ Reset soft-delete if they were previously removed from this workplace
             await UserWorkplace.update(
               { isActive: 1, terminated_at: null },
               { where: { userId: existingUser.id, locationId } }
@@ -159,13 +158,17 @@ export const searchByName = async (req, res) => {
       limit:      10,
     });
 
-    // Check which ones are already ACTIVE at this location
     let alreadyHere = new Set();
     if (currentLocation && UserWorkplace) {
       const existing = await UserWorkplace.findAll({
-        where: { locationId: currentLocation, isActive: 1 },  // ✅ only active
+        where: { locationId: currentLocation, isActive: 1 },
       });
       existing.forEach(uw => alreadyHere.add(uw.userId));
+
+      // Also mark users whose work_location matches (seeded without UserWorkplace rows)
+      allMatches.forEach(u => {
+        if (String(u.work_location) === String(currentLocation)) alreadyHere.add(u.id);
+      });
     }
 
     res.send(allMatches.map(u => ({
@@ -211,7 +214,6 @@ export const assignToWorkplace = async (req, res) => {
       defaults: { userId: targetUser.id, locationId, isActive: 1, createdAt: Date.now() },
     });
 
-    // ✅ If they were previously soft-deleted from this workplace, reinstate them
     if (!created && record.isActive === 0) {
       await UserWorkplace.update(
         { isActive: 1, terminated_at: null },
@@ -246,10 +248,6 @@ export const assignToWorkplace = async (req, res) => {
 };
 
 // ── REMOVE FROM WORKPLACE ─────────────────────────────────────────────────
-// ✅ SOFT DELETE ONLY — sets is_active=0 and terminated_at=now on the
-// UserWorkplace row for THIS location. The User row is NEVER deleted.
-// The employee's other workplace rows, availability at other locations,
-// job roles at other locations, and shifts at other locations are untouched.
 export const removeFromWorkplace = async (req, res) => {
   try {
     const { userId }       = req.params;
@@ -264,7 +262,6 @@ export const removeFromWorkplace = async (req, res) => {
     const locationId = req.user?.impersonatedLocation || requestingUser.work_location;
     if (!locationId) return res.status(400).send({ message: "Employer has no workplace assigned." });
 
-    // ✅ Soft delete: mark as inactive for THIS workplace only
     const [updated] = await UserWorkplace.update(
       { isActive: 0, terminated_at: Date.now() },
       { where: { userId, locationId } }
@@ -274,7 +271,6 @@ export const removeFromWorkplace = async (req, res) => {
       return res.status(404).send({ message: "Employee not found at this workplace." });
     }
 
-    // ✅ If this was their primary work_location, update it to another active workplace
     const targetUser = await User.findOne({ where: { id: userId } });
     if (targetUser && String(targetUser.work_location) === String(locationId)) {
       const remaining = await UserWorkplace.findAll({
@@ -287,7 +283,6 @@ export const removeFromWorkplace = async (req, res) => {
       );
     }
 
-    console.log(`✅ User ${userId} soft-removed from workplace ${locationId} (User record intact)`);
     res.send({
       message: "Employee removed from your workplace. Their account and other workplace records are intact.",
       userId,
@@ -301,6 +296,11 @@ export const removeFromWorkplace = async (req, res) => {
 };
 
 // ── FIND ALL (scoped by workplace) ────────────────────────────────────────
+// Strategy:
+// 1. First check UserWorkplace table for active rows at this location
+// 2. Also include employees whose work_location field matches (handles seeded users
+//    who were inserted directly without a UserWorkplace row)
+// 3. Exclude anyone who has been soft-deleted (terminated_at IS NOT NULL at this location)
 export const findAll = async (req, res) => {
   try {
     const requestingUserId = req.user?.userId || req.user?.id;
@@ -320,16 +320,55 @@ export const findAll = async (req, res) => {
     if (effectiveRole === 'employer' || (requestingUser.role === 'admin' && impersonatedLocation)) {
       const locationId = impersonatedLocation || requestingUser.work_location;
 
-      // ✅ Only return employees with an ACTIVE UserWorkplace row for this location
+      if (!locationId) return res.send([]);
+
+      // ── Step 1: Get IDs from UserWorkplace (active rows only) ──────────
       const activeRecords = await UserWorkplace.findAll({
         where: { locationId, isActive: 1 },
       });
-      const activeUserIds = activeRecords.map(r => r.userId);
+      const activeViaWorkplaceTable = new Set(activeRecords.map(r => r.userId));
 
-      if (activeUserIds.length === 0) return res.send([]);
+      // ── Step 2: Get IDs that were soft-deleted at this location ────────
+      // These should be EXCLUDED even if their work_location field still matches
+      const terminatedRecords = await UserWorkplace.findAll({
+        where: { locationId, isActive: 0 },
+      });
+      const terminatedIds = new Set(terminatedRecords.map(r => r.userId));
+
+      // ── Step 3: Also find employees whose work_location = this location
+      // but have no UserWorkplace row at all (seeded / legacy users)
+      const legacyUsers = await User.findAll({
+        where: {
+          role:          'employee',
+          work_location: locationId,
+        },
+        attributes: { exclude: ['password_hash'] },
+      });
+      const legacyIds = legacyUsers
+        .map(u => u.id)
+        .filter(id => !activeViaWorkplaceTable.has(id) && !terminatedIds.has(id));
+
+      // ── Step 4: Backfill UserWorkplace rows for legacy/seeded users ────
+      // This repairs the data so future queries work correctly
+      for (const legacyId of legacyIds) {
+        try {
+          await UserWorkplace.findOrCreate({
+            where:    { userId: legacyId, locationId },
+            defaults: { userId: legacyId, locationId, isActive: 1, createdAt: Date.now() },
+          });
+        } catch (e) { /* skip if already exists */ }
+      }
+
+      // ── Step 5: Combine all valid IDs ─────────────────────────────────
+      const allValidIds = [
+        ...activeViaWorkplaceTable,
+        ...legacyIds,
+      ].filter(id => !terminatedIds.has(id));
+
+      if (allValidIds.length === 0) return res.send([]);
 
       users = await User.findAll({
-        where:      { id: { [Op.in]: activeUserIds }, role: 'employee' },
+        where:      { id: { [Op.in]: allValidIds }, role: 'employee' },
         attributes: { exclude: ['password_hash'] },
       });
 
@@ -484,13 +523,10 @@ export const update = async (req, res) => {
   }
 };
 
-// ── HARD DELETE (admin only — use with caution) ───────────────────────────
-// This is kept for admin use only. Employers should NEVER call this —
-// they call removeFromWorkplace() instead which soft-deletes.
+// ── HARD DELETE (admin only) ──────────────────────────────────────────────
 export const remove = async (req, res) => {
   const userId = req.params.id;
 
-  // ✅ Only admins can hard-delete. Employers must use removeFromWorkplace.
   const callerRole = req.user?.role || req.user?.actualRole;
   if (callerRole !== 'admin') {
     return res.status(403).send({

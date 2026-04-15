@@ -1,24 +1,69 @@
 import db from "../models/index.js";
 
 const Clock = db.clock;
+const { Op } = db.Sequelize;
 
 const getClockId = (req) => req.params.id || req.params.clockId;
 const getUserId  = (req) => req.user?.userId || req.user?.user_id || req.user?.id;
 
 // ── GET ALL ───────────────────────────────────────────────────────────────
 // Employers see all records at their work_location.
-// If work_location is missing, fall back to showing all records (admin-style).
+// Employees see only their own records.
+// Supports ?userId= query param for employee self-lookup.
 export const findAll = async (req, res) => {
   try {
-    const requestingRole     = req.user?.role;
-    const requestingUserId   = getUserId(req);
-    const workLocation       = req.user?.work_location;
+    const requestingRole   = req.user?.role;
+    const requestingUserId = getUserId(req);
+    const workLocation     = req.user?.work_location;
+
+    // If a userId query param is provided by an employee, scope to that user
+    // (employees can only fetch their own records this way)
+    const queryUserId = req.query.userId || req.query.user_id;
+    if (queryUserId && requestingRole === 'employee') {
+      // Security: employees can only query their own records
+      if (String(queryUserId) !== String(requestingUserId)) {
+        return res.status(403).send({ message: "Access denied." });
+      }
+    }
+
+    // Determine the effective userId filter
+    const filterUserId = (requestingRole === 'employee')
+      ? requestingUserId
+      : (queryUserId || null); // employers can optionally filter by userId
 
     let records;
 
     if (requestingRole === 'employer' || requestingRole === 'admin') {
 
-      if (workLocation) {
+      if (filterUserId) {
+        // Employer querying a specific employee's records
+        records = await db.sequelize.query(`
+          SELECT
+            c.clock_id,
+            c.clock_id   AS id,
+            c.shift_id,
+            c.user_id,
+            c.clock_in_time   AS clockInTime,
+            c.clock_out_time  AS clockOutTime,
+            c.total_hours_worked AS totalHoursWorked,
+            c.status,
+            c.notes,
+            c.approved_by  AS approvedBy,
+            c.approved_at  AS approvedAt,
+            c.created_at   AS createdAt,
+            CONCAT(u.first_name, ' ', u.last_name) AS employee_name,
+            u.email AS employee_email,
+            u.work_location
+          FROM Clock_IN_Clock_OUT c
+          LEFT JOIN User u ON c.user_id = u.user_id
+          WHERE c.user_id = :userId
+          ORDER BY c.clock_in_time DESC
+        `, {
+          replacements: { userId: filterUserId },
+          type: db.Sequelize.QueryTypes.SELECT,
+        });
+
+      } else if (workLocation) {
         // Scoped: only records for employees at this location
         records = await db.sequelize.query(`
           SELECT
@@ -128,7 +173,6 @@ export const findOne = async (req, res) => {
 // ── CLOCK IN ──────────────────────────────────────────────────────────────
 export const clockIn = async (req, res) => {
   try {
-    // Kiosk mode: employer can clock in on behalf of an employee
     const requestingRole = req.user?.role;
     const userId = (requestingRole === 'employer' && req.body.userId)
       ? req.body.userId
@@ -137,7 +181,6 @@ export const clockIn = async (req, res) => {
 
     if (!shiftId) return res.status(400).send({ message: "shiftId is required." });
 
-    // Check not already clocked in
     const existing = await Clock.findOne({ where: { userId, status: 'clocked_in' } });
     if (existing) return res.status(400).send({ message: "Already clocked in." });
 
@@ -159,7 +202,6 @@ export const clockIn = async (req, res) => {
 // ── CLOCK OUT ─────────────────────────────────────────────────────────────
 export const clockOut = async (req, res) => {
   try {
-    // Kiosk mode: employer can clock out on behalf of an employee
     const requestingRole = req.user?.role;
     const userId = (requestingRole === 'employer' && req.body.userId)
       ? req.body.userId
@@ -181,6 +223,65 @@ export const clockOut = async (req, res) => {
   } catch (err) {
     console.error("Error clocking out:", err);
     res.status(500).send({ message: "Error clocking out." });
+  }
+};
+
+// ── SUBMIT TIMECARD ───────────────────────────────────────────────────────
+// Called by employee at end of week to submit their pay period for review.
+// Marks all 'pending' and 'clocked_out' records in the period as 'submitted'.
+export const submitTimecard = async (req, res) => {
+  try {
+    const requestingUserId = getUserId(req);
+    const { userId, periodStart, periodEnd } = req.body;
+
+    // Employees can only submit their own timecard
+    const targetUserId = (req.user?.role === 'employer') ? userId : requestingUserId;
+
+    if (!targetUserId) {
+      return res.status(400).send({ message: "userId is required." });
+    }
+    if (!periodStart || !periodEnd) {
+      return res.status(400).send({ message: "periodStart and periodEnd are required." });
+    }
+
+    const periodStartMs = Number(periodStart);
+    const periodEndMs   = Number(periodEnd);
+
+    // Find all pending/clocked_out records for this user in the period
+    const records = await db.sequelize.query(`
+      SELECT c.clock_id AS id
+      FROM Clock_IN_Clock_OUT c
+      WHERE c.user_id = :userId
+        AND c.status IN ('pending', 'clocked_out')
+        AND c.clock_in_time >= :periodStart
+        AND c.clock_in_time <= :periodEnd
+    `, {
+      replacements: { userId: targetUserId, periodStart: periodStartMs, periodEnd: periodEndMs },
+      type: db.Sequelize.QueryTypes.SELECT,
+    });
+
+    if (records.length === 0) {
+      return res.status(200).send({ message: "No pending records found for this period.", count: 0 });
+    }
+
+    const ids = records.map(r => r.id);
+
+    // Mark all as 'submitted' — employer can then approve or reject
+    await Clock.update(
+      { status: 'pending', updatedAt: Date.now() },
+      { where: { id: { [Op.in]: ids } } }
+    );
+
+    console.log(`✅ Timecard submitted: ${ids.length} records for user ${targetUserId}`);
+    res.send({
+      message: `Timecard submitted successfully. ${ids.length} entr${ids.length === 1 ? 'y' : 'ies'} sent for manager review.`,
+      count:   ids.length,
+      recordIds: ids,
+    });
+
+  } catch (err) {
+    console.error("Error submitting timecard:", err);
+    res.status(500).send({ message: "Error submitting timecard.", error: err.message });
   }
 };
 
