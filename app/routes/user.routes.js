@@ -22,6 +22,7 @@ router.post("/", authenticate, attachLocation, users.create);
 router.get("/", authenticate, attachLocation, users.findAll);
 router.get("/:id", authenticate, users.findOne);
 router.put("/:id", authenticate, users.update);
+router.patch("/:id/certifications", authenticate, users.updateCertifications);
 router.delete("/:id", authenticate, users.remove);
 
 export default router;

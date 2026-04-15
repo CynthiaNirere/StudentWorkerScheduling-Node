@@ -59,6 +59,17 @@ const User = sequelize.define(
       allowNull: true,
       field: "updated_at",
     },
+    certifications: {
+      type: DataTypes.TEXT('long'),
+      allowNull: true,
+      get() {
+        const raw = this.getDataValue('certifications');
+        try { return raw ? JSON.parse(raw) : []; } catch { return []; }
+      },
+      set(value) {
+        this.setDataValue('certifications', JSON.stringify(value || []));
+      },
+    },
   },
   {
     tableName: "User",
