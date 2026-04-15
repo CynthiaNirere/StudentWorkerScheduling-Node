@@ -67,20 +67,20 @@ app.use("/workerscheduling-t1/api", routes);
 
 // ── CRON JOB SETUP ────────────────────────────────────────────────────────
 
-console.log("⏰ Setting up daily task reset cron job...");
+console.log(" Setting up daily task reset cron job...");
 
 cron.schedule('0 0 * * *', async () => {
-  console.log('\n🕐 Midnight - Running daily task reset...');
+  console.log('\n Midnight - Running daily task reset...');
   try {
     await resetDailyTasks();
   } catch (err) {
-    console.error('❌ Cron job failed:', err);
+    console.error(' Cron job failed:', err);
   }
 }, {
   timezone: "America/Chicago"
 });
 
-console.log("✅ Daily task reset cron job scheduled for midnight CST");
+console.log(" Daily task reset cron job scheduled for midnight CST");
 
 // Manual trigger endpoint for testing
 app.post('/workerscheduling-t1/api/admin/trigger-task-reset', async (req, res) => {
@@ -120,7 +120,7 @@ app.use((req, res) => {
 // ── Error Handler ─────────────────────────────────────────────────────────
 
 app.use((err, req, res, next) => {
-  console.error("❌ Server Error:", err);
+  console.error(" Server Error:", err);
   res.status(err.status || 500).json({
     message: err.message || "Internal Server Error",
     error: process.env.NODE_ENV === 'development' ? err.stack : undefined
@@ -134,15 +134,15 @@ const PORT = process.env.PORT || 3131;
 if (process.env.NODE_ENV !== "test") {
   db.sequelize.sync({ alter: false })
     .then(() => {
-      console.log("✅ Database synced");
+      console.log("Database synced");
       app.listen(PORT, () => {
-        console.log(`✅ Server is running on port ${PORT}`);
-        console.log(`📍 API Base: http://localhost:${PORT}/workerscheduling-t1/api`);
-        console.log(`⏰ Cron job active - Daily task reset at midnight CST`);
+        console.log(` Server is running on port ${PORT}`);
+        console.log(` API Base: http://localhost:${PORT}/workerscheduling-t1/api`);
+        console.log(` Cron job active - Daily task reset at midnight CST`);
       });
     })
     .catch(err => {
-      console.error("❌ Database sync failed:", err);
+      console.error(" Database sync failed:", err);
     });
 }
 
