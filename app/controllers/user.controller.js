@@ -423,23 +423,38 @@ export const findOne = async (req, res) => {
     if (!user) return res.status(404).send({ message: `User not found with id=${req.params.id}` });
 
     res.send({
-      user_id:       user.id,
-      userId:        user.id,
-      first_name:    user.fName,
-      last_name:     user.lName,
-      fName:         user.fName,
-      lName:         user.lName,
-      email:         user.email,
-      phone_number:  user.phone_number,
-      role:          user.role,
-      work_location: user.work_location,
-      age:           user.age,
-      bio:           user.bio,
-      created_at:    user.createdAt,
-      updated_at:    user.updatedAt,
+      user_id:        user.id,
+      userId:         user.id,
+      first_name:     user.fName,
+      last_name:      user.lName,
+      fName:          user.fName,
+      lName:          user.lName,
+      email:          user.email,
+      phone_number:   user.phone_number,
+      role:           user.role,
+      work_location:  user.work_location,
+      age:            user.age,
+      bio:            user.bio,
+      certifications: user.certifications || [],
+      created_at:     user.createdAt,
+      updated_at:     user.updatedAt,
     });
   } catch (err) {
     res.status(500).send({ message: "Error retrieving user." });
+  }
+};
+
+// ── UPDATE CERTIFICATIONS ─────────────────────────────────────────────────
+export const updateCertifications = async (req, res) => {
+  try {
+    const { certifications } = req.body;
+    await User.update(
+      { certifications: certifications || [] },
+      { where: { id: req.params.id } }
+    );
+    res.send({ message: 'Certifications updated.' });
+  } catch (err) {
+    res.status(500).send({ message: 'Error updating certifications.' });
   }
 };
 
