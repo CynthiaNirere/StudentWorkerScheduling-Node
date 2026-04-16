@@ -30,6 +30,11 @@ jobs:
           echo "DB_NAME=${{ secrets.AWS_DB_NAME }}" >> .env
           echo "PORT=3131" >> .env
           echo "NODE_ENV=production" >> .env
+          echo "EMAIL_USER=${{ secrets.EMAIL_USER }}" >> .env
+          echo "EMAIL_PASS=${{ secrets.EMAIL_PASS }}" >> .env
+          echo "EMAIL_HOST=${{ secrets.EMAIL_HOST }}" >> .env
+          echo "EMAIL_PORT=${{ secrets.EMAIL_PORT }}" >> .env
+          echo "APP_URL=https://workerscheduling.eaglesoftwareteam.com/sev2026/t1" >> .env
       - run: npm install
       - run: npm run bundle
       - name: Deploy to Server
