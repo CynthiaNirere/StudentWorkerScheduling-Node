@@ -5,20 +5,18 @@ import attachLocation from "../authorization/attachLocation.js";
 
 const router = express.Router();
 
-// Search existing users by name (for assign-to-workplace flow)
 router.get("/search", authenticate, users.searchByName);
 
-// Assign an existing user to the employer's workplace (no new record created)
 router.post("/:userId/assign", authenticate, users.assignToWorkplace);
 
-// Specific routes FIRST (before /:id)
-router.get("/email/:email", authenticate, users.findByEmail);
+router.delete("/:userId/workplace", authenticate, users.removeFromWorkplace);
 
-// Generic CRUD routes
+router.get("/email/:email", authenticate, users.findByEmail);
 router.post("/", authenticate, attachLocation, users.create);
 router.get("/", authenticate, attachLocation, users.findAll);
 router.get("/:id", authenticate, users.findOne);
 router.put("/:id", authenticate, users.update);
+router.patch("/:id/certifications", authenticate, users.updateCertifications);
 router.delete("/:id", authenticate, users.remove);
 
 export default router;

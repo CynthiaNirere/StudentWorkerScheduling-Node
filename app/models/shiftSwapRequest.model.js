@@ -12,7 +12,7 @@ const ShiftSwapRequest = sequelize.define(
     },
     originalShiftId: {
       type: DataTypes.INTEGER,
-      allowNull: false,
+      allowNull: true,
       field: 'original_shift_id'
     },
     status: {

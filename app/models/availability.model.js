@@ -5,55 +5,60 @@ const Availability = sequelize.define(
   "Availability",
   {
     id: {
-      type: DataTypes.INTEGER,
+      type:          DataTypes.INTEGER,
       autoIncrement: true,
-      primaryKey: true,
-      field: "availability_id",
+      primaryKey:    true,
+      field:         "availability_id",
     },
     userId: {
-      type: DataTypes.STRING(255),
+      type:      DataTypes.STRING(255),
       allowNull: false,
-      field: "user_id",
+      field:     "user_id",
     },
     dayOfWeek: {
-      type: DataTypes.INTEGER,
+      type:      DataTypes.INTEGER,
       allowNull: false,
-      field: "day_of_week",
+      field:     "day_of_week",
     },
     startTime: {
-      type: DataTypes.INTEGER,
+      type:      DataTypes.INTEGER,
       allowNull: false,
-      field: "start_time",
+      field:     "start_time",
     },
     endTime: {
-      type: DataTypes.INTEGER,
+      type:      DataTypes.INTEGER,
       allowNull: false,
-      field: "end_time",
+      field:     "end_time",
+    },
+    locationId: {
+      type:      DataTypes.INTEGER,
+      allowNull: true,
+      field:     "location_id",     // ✅ new — scopes availability to a workplace
     },
     effectiveDate: {
-      type: DataTypes.BIGINT,
+      type:      DataTypes.BIGINT,
       allowNull: true,
-      field: "effective_date",
+      field:     "effective_date",
     },
     isActive: {
-      type: DataTypes.INTEGER,
-      allowNull: false,
+      type:         DataTypes.INTEGER,
+      allowNull:    false,
       defaultValue: 1,
-      field: "is_active",
+      field:        "is_active",
     },
     createdAt: {
-      type: DataTypes.BIGINT,
+      type:      DataTypes.BIGINT,
       allowNull: false,
-      field: "created_at",
+      field:     "created_at",
     },
     updatedAt: {
-      type: DataTypes.BIGINT,
+      type:      DataTypes.BIGINT,
       allowNull: true,
-      field: "updated_at",
+      field:     "updated_at",
     },
   },
   {
-    tableName: "Availability",
+    tableName:  "Availability",
     timestamps: false,
   }
 );

@@ -6,7 +6,6 @@ const UserWorkplace = db.userWorkplace;
 const BusinessArea  = db.businessArea;
 const { Op }        = db.Sequelize;
 
-// ── CREATE ────────────────────────────────────────────────────────────────
 export const create = async (req, res) => {
   try {
     const firstName    = req.body.firstName  || req.body.first_name || req.body.fName;
@@ -25,9 +24,6 @@ export const create = async (req, res) => {
 
     const existingUser = await User.findOne({ where: { email } });
     if (existingUser) {
-      // ✅ FIX: Instead of rejecting with 400, auto-assign the existing employee
-      // to this workplace. This handles the case where employer types details of
-      // someone already in the system via the manual form.
       if (role === 'employee' || existingUser.role === 'employee') {
         const reqUser    = await User.findOne({ where: { id: req.user?.userId || req.user?.id } });
         const locationId = req.user?.impersonatedLocation || reqUser?.work_location;
@@ -36,8 +32,12 @@ export const create = async (req, res) => {
           try {
             await UserWorkplace.findOrCreate({
               where:    { userId: existingUser.id, locationId },
-              defaults: { userId: existingUser.id, locationId, createdAt: Date.now() },
+              defaults: { userId: existingUser.id, locationId, isActive: 1, createdAt: Date.now() },
             });
+            await UserWorkplace.update(
+              { isActive: 1, terminated_at: null },
+              { where: { userId: existingUser.id, locationId } }
+            );
             if (!existingUser.work_location) {
               await User.update(
                 { work_location: locationId, updatedAt: Date.now() },
@@ -65,14 +65,10 @@ export const create = async (req, res) => {
       return res.status(400).send({ message: "Email already exists" });
     }
 
-    // Inherit work_location from the requesting employer if not provided
     let finalWorkLocation = workLocation;
     if (role === 'employee' && !workLocation && req.user) {
-      const requestingUser = await User.findOne({ where: { id: req.user.userId || req.user.id } });
-      finalWorkLocation = req.user?.impersonatedLocation || requestingUser?.work_location || null;
-      if (finalWorkLocation) {
-        console.log(`Employee inheriting work_location ${finalWorkLocation} from employer`);
-      }
+      const requestingUser  = await User.findOne({ where: { id: req.user.userId || req.user.id } });
+      finalWorkLocation     = req.user?.impersonatedLocation || requestingUser?.work_location || null;
     }
 
     const rolePrefix = role === 'employer' ? 'mgr' : 'emp';
@@ -97,11 +93,9 @@ export const create = async (req, res) => {
       try {
         await UserWorkplace.findOrCreate({
           where:    { userId: user.id, locationId: finalWorkLocation },
-          defaults: { userId: user.id, locationId: finalWorkLocation, createdAt: Date.now() },
+          defaults: { userId: user.id, locationId: finalWorkLocation, isActive: 1, createdAt: Date.now() },
         });
-      } catch (e) {
-        console.warn("UserWorkplace create skipped:", e.message);
-      }
+      } catch (e) { console.warn("UserWorkplace create skipped:", e.message); }
     }
 
     console.log("✅ User created:", user.id, "at work_location:", user.work_location);
@@ -191,7 +185,6 @@ export const searchByName = async (req, res) => {
     const requestingUser   = await User.findOne({ where: { id: requestingUserId } });
     if (!requestingUser) return res.status(401).send({ message: "Unauthorized" });
 
-    // ✅ FIX: Use impersonatedLocation during admin impersonation
     const currentLocation = req.user?.impersonatedLocation || requestingUser.work_location;
 
     const parts = q.trim().split(/\s+/);
@@ -220,10 +213,14 @@ export const searchByName = async (req, res) => {
 
     let alreadyHere = new Set();
     if (currentLocation && UserWorkplace) {
-      const existing = await UserWorkplace.findAll({ where: { locationId: currentLocation } });
+      const existing = await UserWorkplace.findAll({
+        where: { locationId: currentLocation, isActive: 1 },
+      });
       existing.forEach(uw => alreadyHere.add(uw.userId));
+
+      // Also mark users whose work_location matches (seeded without UserWorkplace rows)
       allMatches.forEach(u => {
-        if (u.work_location === currentLocation) alreadyHere.add(u.id);
+        if (String(u.work_location) === String(currentLocation)) alreadyHere.add(u.id);
       });
     }
 
@@ -254,7 +251,6 @@ export const assignToWorkplace = async (req, res) => {
     const requestingUserId = req.user?.userId || req.user?.id;
     const requestingUser   = await User.findOne({ where: { id: requestingUserId } });
 
-    // ✅ FIX: Use JWT claim role so impersonating admins pass through
     const callerRole = req.user?.role || requestingUser?.role;
     if (!requestingUser || !['employer', 'admin'].includes(callerRole)) {
       return res.status(403).send({ message: "Only employers can assign employees to workplaces." });
@@ -263,14 +259,20 @@ export const assignToWorkplace = async (req, res) => {
     const targetUser = await User.findOne({ where: { id: userId } });
     if (!targetUser) return res.status(404).send({ message: "User not found." });
 
-    // ✅ FIX: Use impersonatedLocation for admin-impersonating-employer case
     const locationId = req.user?.impersonatedLocation || requestingUser.work_location;
     if (!locationId) return res.status(400).send({ message: "Employer has no workplace assigned." });
 
-    const [, created] = await UserWorkplace.findOrCreate({
+    const [record, created] = await UserWorkplace.findOrCreate({
       where:    { userId: targetUser.id, locationId },
-      defaults: { userId: targetUser.id, locationId, createdAt: Date.now() },
+      defaults: { userId: targetUser.id, locationId, isActive: 1, createdAt: Date.now() },
     });
+
+    if (!created && record.isActive === 0) {
+      await UserWorkplace.update(
+        { isActive: 1, terminated_at: null },
+        { where: { userId: targetUser.id, locationId } }
+      );
+    }
 
     if (!targetUser.work_location) {
       await User.update(
@@ -278,8 +280,6 @@ export const assignToWorkplace = async (req, res) => {
         { where: { id: targetUser.id } }
       );
     }
-
-    console.log(`User ${targetUser.id} ${created ? 'assigned to' : 'already at'} location ${locationId}`);
 
     res.send({
       message:        created ? "Employee assigned to your workplace." : "Employee was already at this workplace.",
@@ -300,7 +300,54 @@ export const assignToWorkplace = async (req, res) => {
   }
 };
 
-// ── FIND ALL (scoped by role / workplace) ─────────────────────────────────
+export const removeFromWorkplace = async (req, res) => {
+  try {
+    const { userId }       = req.params;
+    const requestingUserId = req.user?.userId || req.user?.id;
+    const requestingUser   = await User.findOne({ where: { id: requestingUserId } });
+
+    const callerRole = req.user?.role || requestingUser?.role;
+    if (!requestingUser || !['employer', 'admin'].includes(callerRole)) {
+      return res.status(403).send({ message: "Only employers can remove employees from workplaces." });
+    }
+
+    const locationId = req.user?.impersonatedLocation || requestingUser.work_location;
+    if (!locationId) return res.status(400).send({ message: "Employer has no workplace assigned." });
+
+    const [updated] = await UserWorkplace.update(
+      { isActive: 0, terminated_at: Date.now() },
+      { where: { userId, locationId } }
+    );
+
+    if (updated === 0) {
+      return res.status(404).send({ message: "Employee not found at this workplace." });
+    }
+
+    const targetUser = await User.findOne({ where: { id: userId } });
+    if (targetUser && String(targetUser.work_location) === String(locationId)) {
+      const remaining = await UserWorkplace.findAll({
+        where: { userId, isActive: 1 },
+      });
+      const newPrimary = remaining.length > 0 ? remaining[0].locationId : null;
+      await User.update(
+        { work_location: newPrimary, updatedAt: Date.now() },
+        { where: { id: userId } }
+      );
+    }
+
+    res.send({
+      message: "Employee removed from your workplace. Their account and other workplace records are intact.",
+      userId,
+      locationId,
+    });
+
+  } catch (err) {
+    console.error("removeFromWorkplace error:", err);
+    res.status(500).send({ message: "Error removing employee from workplace." });
+  }
+};
+
+
 export const findAll = async (req, res) => {
   try {
     const requestingUserId = req.user?.userId || req.user?.id;
@@ -312,33 +359,60 @@ export const findAll = async (req, res) => {
     });
     if (!requestingUser) return res.status(404).send({ message: "User not found" });
 
-    console.log(`User ${requestingUser.email} (${requestingUser.role}) listing users, location ${requestingUser.work_location}`);
-
-    let users = [];
-
     const effectiveRole        = req.user?.role || requestingUser.role;
     const impersonatedLocation = req.user?.impersonatedLocation || null;
+
+    let users = [];
 
     if (effectiveRole === 'employer' || (requestingUser.role === 'admin' && impersonatedLocation)) {
       const locationId = impersonatedLocation || requestingUser.work_location;
 
-      let employeeIds = new Set();
+      if (!locationId) return res.send([]);
 
-      const directMatches = await User.findAll({
-        where:      { role: 'employee', work_location: locationId },
-        attributes: ['id'],
+      // ── Step 1: Get IDs from UserWorkplace (active rows only) ──────────
+      const activeRecords = await UserWorkplace.findAll({
+        where: { locationId, isActive: 1 },
       });
-      directMatches.forEach(u => employeeIds.add(u.id));
+      const activeViaWorkplaceTable = new Set(activeRecords.map(r => r.userId));
 
-      if (UserWorkplace) {
-        const jwRecords = await UserWorkplace.findAll({ where: { locationId } });
-        jwRecords.forEach(r => employeeIds.add(r.userId));
+      
+      const terminatedRecords = await UserWorkplace.findAll({
+        where: { locationId, isActive: 0 },
+      });
+      const terminatedIds = new Set(terminatedRecords.map(r => r.userId));
+
+      const legacyUsers = await User.findAll({
+        where: {
+          role:          'employee',
+          work_location: locationId,
+        },
+        attributes: { exclude: ['password_hash'] },
+      });
+      const legacyIds = legacyUsers
+        .map(u => u.id)
+        .filter(id => !activeViaWorkplaceTable.has(id) && !terminatedIds.has(id));
+
+      // ── Step 4: Backfill UserWorkplace rows for legacy/seeded users ────
+      // This repairs the data so future queries work correctly
+      for (const legacyId of legacyIds) {
+        try {
+          await UserWorkplace.findOrCreate({
+            where:    { userId: legacyId, locationId },
+            defaults: { userId: legacyId, locationId, isActive: 1, createdAt: Date.now() },
+          });
+        } catch (e) { /* skip if already exists */ }
       }
 
-      if (employeeIds.size === 0) return res.send([]);
+      // ── Step 5: Combine all valid IDs ─────────────────────────────────
+      const allValidIds = [
+        ...activeViaWorkplaceTable,
+        ...legacyIds,
+      ].filter(id => !terminatedIds.has(id));
+
+      if (allValidIds.length === 0) return res.send([]);
 
       users = await User.findAll({
-        where:      { id: { [Op.in]: [...employeeIds] }, role: 'employee' },
+        where:      { id: { [Op.in]: allValidIds }, role: 'employee' },
         attributes: { exclude: ['password_hash'] },
       });
 
@@ -359,8 +433,6 @@ export const findAll = async (req, res) => {
     } else {
       return res.status(403).send({ message: "Access denied" });
     }
-
-    console.log(`Returning ${users.length} users`);
 
     res.send(users.map(u => ({
       user_id:       u.id,
@@ -385,7 +457,6 @@ export const findAll = async (req, res) => {
   }
 };
 
-// ── FIND ONE ──────────────────────────────────────────────────────────────
 export const findOne = async (req, res) => {
   try {
     const user = await User.findOne({
@@ -395,28 +466,41 @@ export const findOne = async (req, res) => {
     if (!user) return res.status(404).send({ message: `User not found with id=${req.params.id}` });
 
     res.send({
-      user_id:       user.id,
-      userId:        user.id,
-      first_name:    user.fName,
-      last_name:     user.lName,
-      fName:         user.fName,
-      lName:         user.lName,
-      email:         user.email,
-      phone_number:  user.phone_number,
-      role:          user.role,
-      work_location: user.work_location,
-      age:           user.age,
-      bio:           user.bio,
-      created_at:    user.createdAt,
-      updated_at:    user.updatedAt,
+      user_id:        user.id,
+      userId:         user.id,
+      first_name:     user.fName,
+      last_name:      user.lName,
+      fName:          user.fName,
+      lName:          user.lName,
+      email:          user.email,
+      phone_number:   user.phone_number,
+      role:           user.role,
+      work_location:  user.work_location,
+      age:            user.age,
+      bio:            user.bio,
+      certifications: user.certifications || [],
+      created_at:     user.createdAt,
+      updated_at:     user.updatedAt,
     });
   } catch (err) {
-    console.error("❌ Error retrieving user:", err);
     res.status(500).send({ message: "Error retrieving user." });
   }
 };
 
-// ── FIND BY EMAIL ─────────────────────────────────────────────────────────
+// ── UPDATE CERTIFICATIONS ─────────────────────────────────────────────────
+export const updateCertifications = async (req, res) => {
+  try {
+    const { certifications } = req.body;
+    await User.update(
+      { certifications: certifications || [] },
+      { where: { id: req.params.id } }
+    );
+    res.send({ message: 'Certifications updated.' });
+  } catch (err) {
+    res.status(500).send({ message: 'Error updating certifications.' });
+  }
+};
+
 export const findByEmail = async (req, res) => {
   try {
     const user = await User.findOne({
@@ -442,12 +526,10 @@ export const findByEmail = async (req, res) => {
       updated_at:    user.updatedAt,
     });
   } catch (err) {
-    console.error("❌ Error retrieving user by email:", err);
     res.status(500).send({ message: "Error retrieving user." });
   }
 };
 
-// ── UPDATE ────────────────────────────────────────────────────────────────
 export const update = async (req, res) => {
   try {
     const userId     = req.params.id;
@@ -471,10 +553,7 @@ export const update = async (req, res) => {
     updateData.updatedAt = Date.now();
 
     const [updated] = await User.update(updateData, { where: { id: userId } });
-
-    if (updated !== 1) {
-      return res.status(404).send({ message: "User not found or no data changed." });
-    }
+    if (updated !== 1) return res.status(404).send({ message: "User not found or no data changed." });
 
     const user = await User.findOne({ where: { id: userId }, attributes: { exclude: ['password_hash'] } });
 
@@ -496,29 +575,27 @@ export const update = async (req, res) => {
       },
     });
   } catch (err) {
-    console.error("❌ Error updating user:", err);
     res.status(500).send({ message: "Error updating user." });
   }
 };
 
-// ── REMOVE ────────────────────────────────────────────────────────────────
 export const remove = async (req, res) => {
   const userId = req.params.id;
-  console.log(`Attempting to delete user: ${userId}`);
+
+  const callerRole = req.user?.role || req.user?.actualRole;
+  if (callerRole !== 'admin') {
+    return res.status(403).send({
+      message: "Hard delete is restricted to admins. Use 'Remove from Workplace' to remove an employee from your location.",
+    });
+  }
 
   const user = await User.findOne({ where: { id: userId } });
   if (!user) return res.status(404).send({ message: "User not found" });
 
   const transaction = await db.sequelize.transaction();
-
   try {
     const q = (sql, replacements) =>
       db.sequelize.query(sql, { replacements, transaction }).catch(e => console.warn(e.message));
-
-    if (user.role === 'employer' && user.work_location) {
-      await q('UPDATE User SET work_location = NULL WHERE work_location = ? AND role = "employee"',
-        [user.work_location]);
-    }
 
     await q('DELETE FROM UserWorkplace WHERE user_id = ?',                        [userId]);
     await q('DELETE FROM Session WHERE user_id = ?',                              [userId]);
@@ -545,6 +622,9 @@ export const remove = async (req, res) => {
   } catch (err) {
     await transaction.rollback();
     console.error("❌ Error deleting user:", err);
+    res.send({ message: "User permanently deleted.", userId });
+  } catch (err) {
+    await transaction.rollback();
     res.status(500).send({ message: "Error deleting user.", error: err.message });
   }
 };

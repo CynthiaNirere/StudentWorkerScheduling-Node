@@ -1,6 +1,6 @@
 import { DataTypes } from "sequelize";
 import sequelize from "../config/sequelizeInstance.js";
-
+//
 const User = sequelize.define(
   "User",
   {
@@ -58,6 +58,17 @@ const User = sequelize.define(
       type: DataTypes.BIGINT,
       allowNull: true,
       field: "updated_at",
+    },
+    certifications: {
+      type: DataTypes.TEXT('long'),
+      allowNull: true,
+      get() {
+        const raw = this.getDataValue('certifications');
+        try { return raw ? JSON.parse(raw) : []; } catch { return []; }
+      },
+      set(value) {
+        this.setDataValue('certifications', JSON.stringify(value || []));
+      },
     },
   },
   {
