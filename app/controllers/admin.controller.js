@@ -1,4 +1,5 @@
 import db from "../models/index.js";
+import { sendManagerWelcomeEmail, sendEmployeeWelcomeEmail } from "../services/emailService.js";
 
 const User = db.user;
 const BusinessArea = db.businessArea;
@@ -61,6 +62,57 @@ export const createUser = async (req, res) => {
     });
     
     console.log("User created with ID:", user.id);
+
+    // ✅ NEW: Send welcome email based on role
+    try {
+      // Get workplace name for email
+      let workplaceName = 'your workplace';
+      if (workLocation && BusinessArea) {
+        const workplace = await BusinessArea.findOne({ where: { location_id: workLocation } });
+        if (workplace) {
+          workplaceName = workplace.name;
+        }
+      }
+
+      // Get who added this user
+      let addedByName = 'your administrator';
+      if (req.user) {
+        const addingUser = await User.findOne({ where: { id: req.user.userId || req.user.id } });
+        if (addingUser) {
+          addedByName = `${addingUser.fName} ${addingUser.lName}`;
+        }
+      }
+
+      const userData = {
+        email: user.email,
+        first_name: user.fName,
+        last_name: user.lName,
+        fName: user.fName,
+        lName: user.lName,
+      };
+
+      // Send appropriate email based on role
+      if (role === 'employer') {
+        console.log('📧 Sending manager welcome email to:', user.email);
+        const emailResult = await sendManagerWelcomeEmail(userData, workplaceName, addedByName);
+        if (emailResult.success) {
+          console.log('✅ Manager welcome email sent successfully');
+        } else {
+          console.error('❌ Failed to send manager welcome email:', emailResult.error);
+        }
+      } else if (role === 'employee') {
+        console.log('📧 Sending employee welcome email to:', user.email);
+        const emailResult = await sendEmployeeWelcomeEmail(userData, workplaceName, addedByName);
+        if (emailResult.success) {
+          console.log('✅ Employee welcome email sent successfully');
+        } else {
+          console.error('❌ Failed to send employee welcome email:', emailResult.error);
+        }
+      }
+    } catch (emailError) {
+      // Don't fail user creation if email fails
+      console.error('❌ Error sending welcome email:', emailError);
+    }
     
     // Return formatted user data
     const responseData = {
@@ -75,7 +127,7 @@ export const createUser = async (req, res) => {
       tempPassword: tempPassword
     };
     
-    console.log(" User created successfully");
+    console.log("✅ User created successfully");
     res.status(201).send({
       message: "User created successfully! Temporary password: " + tempPassword,
       user: responseData
@@ -116,7 +168,7 @@ export const getAllUsers = async (req, res) => {
     
     res.send(formattedUsers);
   } catch (err) {
-    console.error(" Error retrieving users:", err);
+    console.error("❌ Error retrieving users:", err);
     res.status(500).send({ message: "Error retrieving users." });
   }
 };
@@ -149,7 +201,7 @@ export const getUserById = async (req, res) => {
     
     res.send(formattedUser);
   } catch (err) {
-    console.error(" Error retrieving user:", err);
+    console.error("❌ Error retrieving user:", err);
     res.status(500).send({ message: "Error retrieving user." });
   }
 };
@@ -208,7 +260,7 @@ export const updateUser = async (req, res) => {
       res.status(404).send({ message: `User not found or no data changed.` });
     }
   } catch (err) {
-    console.error(" Error updating user:", err);
+    console.error("❌ Error updating user:", err);
     res.status(500).send({ message: "Error updating user." });
   }
 };
@@ -362,7 +414,7 @@ export const deleteUser = async (req, res) => {
 // Create and Save a new Business Area
 export const createBusinessArea = async (req, res) => {
   try {
-    console.log(" Creating business area with data:", req.body);
+    console.log("📝 Creating business area with data:", req.body);
     
     if (!req.body.name || !req.body.address) {
       return res.status(400).send({ message: "Name and address are required!" });
@@ -375,11 +427,11 @@ export const createBusinessArea = async (req, res) => {
       is_active: 1
     });
     
-    console.log(" Business area created with ID:", businessArea.location_id);
+    console.log("✅ Business area created with ID:", businessArea.location_id);
     res.status(201).send(businessArea);
     
   } catch (err) {
-    console.error(" Error creating business area:", err.message);
+    console.error("❌ Error creating business area:", err.message);
     console.error("Stack:", err.stack);
     res.status(500).send({
       message: err.message || "Error creating business area.",
@@ -400,7 +452,7 @@ export const getAllBusinessAreas = async (req, res) => {
     });
     res.send(businessAreas);
   } catch (err) {
-    console.error(" Error retrieving business areas:", err);
+    console.error("❌ Error retrieving business areas:", err);
     res.status(500).send({ message: "Error retrieving business areas." });
   }
 };
@@ -419,7 +471,7 @@ export const getBusinessAreaById = async (req, res) => {
       return res.status(404).send({ message: `Business area not found with id=${id}` });
     res.send(businessArea);
   } catch (err) {
-    console.error(" Error retrieving business area:", err);
+    console.error("❌ Error retrieving business area:", err);
     res.status(500).send({ message: "Error retrieving business area." });
   }
 };
@@ -441,7 +493,7 @@ export const updateBusinessArea = async (req, res) => {
     else
       res.status(404).send({ message: `Business area not found or no data changed.` });
   } catch (err) {
-    console.error(" Error updating business area:", err);
+    console.error("❌ Error updating business area:", err);
     res.status(500).send({ message: "Error updating business area." });
   }
 };
@@ -451,7 +503,7 @@ export const deleteBusinessArea = async (req, res) => {
   try {
     const id = req.params.id;
     
-    console.log(` Soft deleting business area ${id}...`);
+    console.log(`🗑️ Soft deleting business area ${id}...`);
     
     // Check if business area exists first
     const businessArea = await BusinessArea.findByPk(id);
@@ -466,14 +518,14 @@ export const deleteBusinessArea = async (req, res) => {
     );
     
     if (updated === 1) {
-      console.log(' Business area deleted successfully');
+      console.log('✅ Business area deleted successfully');
       return res.send({ message: "Business area deleted successfully." });
     }
     
     return res.status(404).send({ message: `Business area not found.` });
     
   } catch (err) {
-    console.error(' Error deleting business area:', err);
+    console.error('❌ Error deleting business area:', err);
     console.error('Error message:', err.message);
     res.status(500).send({ 
       message: err.message || "Error deleting business area." 
