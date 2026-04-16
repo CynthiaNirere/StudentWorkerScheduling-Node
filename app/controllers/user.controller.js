@@ -622,9 +622,6 @@ export const remove = async (req, res) => {
   } catch (err) {
     await transaction.rollback();
     console.error("❌ Error deleting user:", err);
-    res.send({ message: "User permanently deleted.", userId });
-  } catch (err) {
-    await transaction.rollback();
     res.status(500).send({ message: "Error deleting user.", error: err.message });
   }
 };
