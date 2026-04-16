@@ -1,4 +1,5 @@
 import db from "../models/index.js";
+import { sendManagerWelcomeEmail, sendEmployeeWelcomeEmail } from "../services/emailService.js";
 
 const User          = db.user;
 const UserWorkplace = db.userWorkplace;
@@ -97,6 +98,59 @@ export const create = async (req, res) => {
       } catch (e) { console.warn("UserWorkplace create skipped:", e.message); }
     }
 
+    console.log("✅ User created:", user.id, "at work_location:", user.work_location);
+
+    // ✅ NEW: Send welcome email based on role
+    try {
+      // Get workplace name for email
+      let workplaceName = 'your workplace';
+      if (finalWorkLocation && BusinessArea) {
+        const workplace = await BusinessArea.findOne({ where: { location_id: finalWorkLocation } });
+        if (workplace) {
+          workplaceName = workplace.name;
+        }
+      }
+
+      // Get who added this user
+      let addedByName = 'your administrator';
+      if (req.user) {
+        const addingUser = await User.findOne({ where: { id: req.user.userId || req.user.id } });
+        if (addingUser) {
+          addedByName = `${addingUser.fName} ${addingUser.lName}`;
+        }
+      }
+
+      const userData = {
+        email: user.email,
+        first_name: user.fName,
+        last_name: user.lName,
+        fName: user.fName,
+        lName: user.lName,
+      };
+
+      // Send appropriate email based on role
+      if (role === 'employer') {
+        console.log('📧 Sending manager welcome email to:', user.email);
+        const emailResult = await sendManagerWelcomeEmail(userData, workplaceName, addedByName);
+        if (emailResult.success) {
+          console.log('✅ Manager welcome email sent successfully');
+        } else {
+          console.error('❌ Failed to send manager welcome email:', emailResult.error);
+        }
+      } else if (role === 'employee') {
+        console.log('📧 Sending employee welcome email to:', user.email);
+        const emailResult = await sendEmployeeWelcomeEmail(userData, workplaceName, addedByName);
+        if (emailResult.success) {
+          console.log('✅ Employee welcome email sent successfully');
+        } else {
+          console.error('❌ Failed to send employee welcome email:', emailResult.error);
+        }
+      }
+    } catch (emailError) {
+      // Don't fail user creation if email fails
+      console.error('❌ Error sending welcome email:', emailError);
+    }
+
     res.status(201).send({
       user_id:       user.id,
       userId:        user.id,
@@ -114,7 +168,7 @@ export const create = async (req, res) => {
     });
 
   } catch (err) {
-    console.error("Error creating user:", err.message);
+    console.error("❌ Error creating user:", err.message);
     res.status(500).send({ message: err.message || "Error creating user." });
   }
 };
@@ -562,6 +616,12 @@ export const remove = async (req, res) => {
     await User.destroy({ where: { id: userId }, transaction });
     await transaction.commit();
 
+    console.log(`✅ Successfully deleted user: ${userId}`);
+    res.send({ message: "User deleted successfully.", userId });
+
+  } catch (err) {
+    await transaction.rollback();
+    console.error("❌ Error deleting user:", err);
     res.send({ message: "User permanently deleted.", userId });
   } catch (err) {
     await transaction.rollback();
