@@ -12,7 +12,7 @@ const Clock = sequelize.define(
     },
     shiftId: {
       type: DataTypes.INTEGER,
-      allowNull: false,
+      allowNull: true,
       field: "shift_id",
     },
     userId: {
