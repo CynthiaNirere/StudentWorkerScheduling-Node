@@ -17,7 +17,7 @@ export const create = async (req, res) => {
     const notes = req.body.notes;
     const status = req.body.status || 'draft';
     
-    if (!shiftTime || !startTime || !endTime || !locationId || !jobRoleId) {
+    if (!shiftTime || !startTime || !endTime || !locationId) {
       return res.status(400).send({ message: "Required fields missing!" });
     }
     
@@ -39,7 +39,7 @@ export const create = async (req, res) => {
       minimumWorkers: req.body.minimumWorkers || 1,
       maximumWorkers: req.body.maximumWorkers || 1,
       locationId: locationId,
-      jobRoleId: jobRoleId,
+      jobRoleId: jobRoleId || null,
       status: status,
       createdAt: Date.now(),
       updatedAt: null
