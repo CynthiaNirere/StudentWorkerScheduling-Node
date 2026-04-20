@@ -61,7 +61,7 @@ const Shift = sequelize.define(
     },
     jobRoleId: {
       type: DataTypes.INTEGER,
-      allowNull: false,
+      allowNull: true,
       field: 'job_role_id'
     },
     status: {
