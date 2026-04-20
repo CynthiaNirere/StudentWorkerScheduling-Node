@@ -6,6 +6,7 @@ const router = express.Router();
 
 // Clock actions
 router.post("/clock-in",            authenticate, clock.clockIn);
+router.post("/manual",              authenticate, clock.createManual);
 router.put("/clock-out/:id",        authenticate, clock.clockOut);
 
 // ── NEW: Submit timecard for a pay period ─────────────────────────────────

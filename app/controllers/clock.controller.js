@@ -177,10 +177,32 @@ export const clockIn = async (req, res) => {
     const userId = (requestingRole === 'employer' && req.body.userId)
       ? req.body.userId
       : getUserId(req);
-    const shiftId = req.body.shiftId || req.body.shift_id;
+    const shiftId = req.body.shiftId || req.body.shift_id || null;
 
-    if (!shiftId) return res.status(400).send({ message: "shiftId is required." });
+    // Manual entry: clockInTime provided in body (no active shift)
+    if (!shiftId) {
+      const { clockInTime, clockOutTime, notes } = req.body;
+      if (!clockInTime) return res.status(400).send({ message: "clockInTime is required for manual entries." });
 
+      const inMs       = Number(clockInTime);
+      const outMs      = clockOutTime ? Number(clockOutTime) : null;
+      const totalHours = outMs ? parseFloat(((outMs - inMs) / (1000 * 60 * 60)).toFixed(2)) : null;
+
+      const record = await Clock.create({
+        userId,
+        shiftId:          null,
+        clockInTime:      inMs,
+        clockOutTime:     outMs,
+        totalHoursWorked: totalHours,
+        notes:            notes || null,
+        status:           'pending',
+        createdAt:        Date.now(),
+      });
+
+      return res.status(201).send(record);
+    }
+
+    // Normal clock-in with a shift
     const existing = await Clock.findOne({ where: { userId, status: 'clocked_in' } });
     if (existing) return res.status(400).send({ message: "Already clocked in." });
 
@@ -196,6 +218,41 @@ export const clockIn = async (req, res) => {
   } catch (err) {
     console.error("Error clocking in:", err);
     res.status(500).send({ message: "Error clocking in." });
+  }
+};
+
+// ── MANUAL ENTRY ─────────────────────────────────────────────────────────
+// Creates a complete time record without a shift (manual/historical entries).
+export const createManual = async (req, res) => {
+  try {
+    const requestingRole = req.user?.role;
+    const userId = (requestingRole === 'employer' && req.body.userId)
+      ? req.body.userId
+      : getUserId(req);
+
+    const { clockInTime, clockOutTime, notes } = req.body;
+
+    if (!clockInTime) return res.status(400).send({ message: "clockInTime is required." });
+
+    const inMs       = Number(clockInTime);
+    const outMs      = clockOutTime ? Number(clockOutTime) : null;
+    const totalHours = outMs ? parseFloat(((outMs - inMs) / (1000 * 60 * 60)).toFixed(2)) : null;
+
+    const record = await Clock.create({
+      userId,
+      shiftId:          null,
+      clockInTime:      inMs,
+      clockOutTime:     outMs,
+      totalHoursWorked: totalHours,
+      notes:            notes || null,
+      status:           'pending',
+      createdAt:        Date.now(),
+    });
+
+    res.status(201).send(record);
+  } catch (err) {
+    console.error("Error creating manual entry:", err);
+    res.status(500).send({ message: "Error creating manual entry." });
   }
 };
 
