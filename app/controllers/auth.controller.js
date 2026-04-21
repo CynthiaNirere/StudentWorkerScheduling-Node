@@ -23,7 +23,7 @@ exports.login = async (req, res) => {
     const ticket     = await client.verifyIdToken({
       idToken:            googleToken,
       audience:           google_id,
-      clockSkewInSeconds: 60,   // ✅ FIX: allows up to 60s clock difference between server and Google
+      clockSkewInSeconds: 60,
     });
     const googleUser = ticket.getPayload();
 
@@ -49,18 +49,23 @@ exports.login = async (req, res) => {
     if (!user) {
       console.log(`👤 GUEST USER detected: ${email}`);
       const guestToken = jwt.sign({ email, isGuest: true }, authconfig.secret, { expiresIn: 86400 });
-      const expiresAt  = now + 86400 * 1000;
 
-      await Session.create({ token: guestToken, userId: null, createdAt: now, isActive: 1, expiresAt });
-      console.log("✅ Guest session created for:", email);
+      // No DB session needed for guests — JWT is self-contained
+      console.log("✅ Guest token issued for:", email);
 
       return res.send({
-        userId: null, user_id: null, email,
-        fName: firstName, lName: lastName,
-        first_name: firstName, last_name: lastName,
-        role: 'guest', isGuest: true, work_location: null,
-        token: guestToken,
-        message: "Guest login - not registered in system",
+        userId:       null,
+        user_id:      null,
+        email,
+        fName:        firstName,
+        lName:        lastName,
+        first_name:   firstName,
+        last_name:    lastName,
+        role:         'guest',
+        isGuest:      true,
+        work_location: null,
+        token:        guestToken,
+        message:      "Guest login - not registered in system",
       });
     }
 
@@ -77,10 +82,12 @@ exports.login = async (req, res) => {
     if (!user.work_location && user.role !== 'admin') {
       console.log(`User ${email} has no work_location → blocking`);
       return res.status(200).send({
-        blocked: true,
-        reason:  'no_workplace',
-        message: "Your account exists but hasn't been assigned to a workplace yet. Ask your supervisor.",
-        email: user.email, fName: user.fName, lName: user.lName,
+        blocked:  true,
+        reason:   'no_workplace',
+        message:  "Your account exists but hasn't been assigned to a workplace yet. Ask your supervisor.",
+        email:    user.email,
+        fName:    user.fName,
+        lName:    user.lName,
       });
     }
 
@@ -105,10 +112,18 @@ exports.login = async (req, res) => {
       const expiresAt = now + 86400 * 1000;
       await Session.create({ token, userId: user.id, createdAt: now, isActive: 1, expiresAt });
       return res.status(200).send({
-        needsWorkplaceSelect: true, workplaces,
-        userId: user.id, user_id: user.id, email: user.email,
-        fName: user.fName, lName: user.lName, first_name: user.fName, last_name: user.lName,
-        role: user.role, work_location: user.work_location, token,
+        needsWorkplaceSelect: true,
+        workplaces,
+        userId:       user.id,
+        user_id:      user.id,
+        email:        user.email,
+        fName:        user.fName,
+        lName:        user.lName,
+        first_name:   user.fName,
+        last_name:    user.lName,
+        role:         user.role,
+        work_location: user.work_location,
+        token,
       });
     }
 
@@ -140,9 +155,6 @@ exports.login = async (req, res) => {
 };
 
 // ── IMPERSONATE ───────────────────────────────────────────────────────────
-// Admin enters a workplace view without creating a DB session.
-// A short-lived JWT carries impersonation metadata; the original admin token
-// is stored in localStorage so we can restore it on exit.
 exports.impersonate = async (req, res) => {
   try {
     const adminId   = req.user?.userId || req.user?.id;
@@ -158,9 +170,6 @@ exports.impersonate = async (req, res) => {
     const area = await BusinessArea.findOne({ where: { location_id: locationId } });
     if (!area) return res.status(404).send({ message: "Workplace not found." });
 
-    // Mint a 1-hour impersonation token. Role is 'employer' so all employer
-    // middleware/queries work correctly. actualRole='admin' lets the layout
-    // know to show the impersonation banner.
     const impersonationToken = jwt.sign(
       {
         id:                       adminUser.id,
@@ -200,8 +209,6 @@ exports.impersonate = async (req, res) => {
 };
 
 // ── EXIT IMPERSONATION ────────────────────────────────────────────────────
-// Client sends back the original admin token it saved in localStorage.
-// We verify it and return the admin payload so the frontend restores state.
 exports.exitImpersonation = async (req, res) => {
   try {
     const { adminToken } = req.body;
@@ -244,11 +251,17 @@ exports.exitImpersonation = async (req, res) => {
 
 function buildUserPayload(user, token) {
   const payload = {
-    userId: user.id, user_id: user.id, email: user.email,
-    fName: user.fName, lName: user.lName,
-    first_name: user.fName, last_name: user.lName,
-    role: user.role, isGuest: false,
-    work_location: user.work_location, token,
+    userId:        user.id,
+    user_id:       user.id,
+    email:         user.email,
+    fName:         user.fName,
+    lName:         user.lName,
+    first_name:    user.fName,
+    last_name:     user.lName,
+    role:          user.role,
+    isGuest:       false,
+    work_location: user.work_location,
+    token,
   };
   console.log("📦 Built user payload:", payload);
   return payload;
@@ -260,7 +273,7 @@ exports.logout = async (req, res) => {
     const session = await Session.findOne({ where: { token: req.body.token } });
     if (!session) return res.send({ message: "Already logged out." });
     await Session.update({ isActive: 0 }, { where: { id: session.id } });
-    console.log(" Logged out successfully");
+    console.log("✅ Logged out successfully");
     return res.send({ message: "Logged out successfully." });
   } catch (err) {
     console.error("Logout error:", err);
