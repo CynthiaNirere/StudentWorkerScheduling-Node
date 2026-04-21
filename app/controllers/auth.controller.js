@@ -20,7 +20,11 @@ exports.login = async (req, res) => {
     if (!googleToken) return res.status(400).send({ message: "No credential provided" });
 
     const client     = new OAuth2Client(google_id);
-    const ticket     = await client.verifyIdToken({ idToken: googleToken, audience: google_id });
+    const ticket     = await client.verifyIdToken({
+      idToken:            googleToken,
+      audience:           google_id,
+      clockSkewInSeconds: 60,   // ✅ FIX: allows up to 60s clock difference between server and Google
+    });
     const googleUser = ticket.getPayload();
 
     let email     = googleUser.email;

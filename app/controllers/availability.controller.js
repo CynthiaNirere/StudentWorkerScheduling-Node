@@ -46,16 +46,11 @@ export const create = async (req, res) => {
 // so Brew employers never see Gym availability rows, even for shared employees.
 export const findAll = async (req, res) => {
   try {
-    const locationId =
-      req.query.locationId   ||
-      req.query.location_id  ||
-      getCallerLocation(req) ||
-      null;
-
     const where = {};
 
-    if (locationId) {
-      where.locationId = locationId;
+    // Optional: filter by location
+    if (req.query.locationId || req.query.location_id) {
+      where.locationId = req.query.locationId || req.query.location_id;
     }
 
     // Optional: filter by a specific user
