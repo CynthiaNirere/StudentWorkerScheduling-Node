@@ -260,7 +260,7 @@ exports.logout = async (req, res) => {
     const session = await Session.findOne({ where: { token: req.body.token } });
     if (!session) return res.send({ message: "Already logged out." });
     await Session.update({ isActive: 0 }, { where: { id: session.id } });
-    console.log("✅ Logged out successfully");
+    console.log(" Logged out successfully");
     return res.send({ message: "Logged out successfully." });
   } catch (err) {
     console.error("Logout error:", err);

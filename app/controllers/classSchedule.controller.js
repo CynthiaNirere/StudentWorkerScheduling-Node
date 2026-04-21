@@ -125,7 +125,6 @@ export const getClassSchedule = async (req, res) => {
  */
 export const getAvailableTerms = async (req, res) => {
   try {
-    // Generate term codes for current year and previous year
     const currentYear = new Date().getFullYear();
     
     const terms = [
