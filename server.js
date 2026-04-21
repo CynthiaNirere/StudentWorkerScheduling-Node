@@ -3,6 +3,7 @@ import cors from "cors";
 import cron from 'node-cron';
 import db from "./app/models/index.js";
 import routes from "./app/routes/index.js";
+import classScheduleRoutes from './app/routes/classschedule.routes.js';
 import { resetDailyTasks } from './app/jobs/dailyTaskReset.js';
 
 const app = express();
@@ -58,29 +59,31 @@ app.get("/", (req, res) => {
       shifts: "/workerscheduling-t1/api/shifts",
       businessAreas: "/workerscheduling-t1/api/business-areas",
       jobRoles: "/workerscheduling-t1/api/job-roles",
+      classSchedule: "/workerscheduling-t1/api/class-schedule",
     }
   });
 });
 
 // API Routes
 app.use("/workerscheduling-t1/api", routes);
+app.use("/workerscheduling-t1/api/class-schedule", classScheduleRoutes);
 
 // ── CRON JOB SETUP ────────────────────────────────────────────────────────
 
-console.log(" Setting up daily task reset cron job...");
+console.log("⏰ Setting up daily task reset cron job...");
 
 cron.schedule('0 0 * * *', async () => {
-  console.log('\n Midnight - Running daily task reset...');
+  console.log('\n🕛 Midnight - Running daily task reset...');
   try {
     await resetDailyTasks();
   } catch (err) {
-    console.error(' Cron job failed:', err);
+    console.error('❌ Cron job failed:', err);
   }
 }, {
   timezone: "America/Chicago"
 });
 
-console.log(" Daily task reset cron job scheduled for midnight CST");
+console.log("✅ Daily task reset cron job scheduled for midnight CST");
 
 // Manual trigger endpoint for testing
 app.post('/workerscheduling-t1/api/admin/trigger-task-reset', async (req, res) => {
@@ -93,7 +96,7 @@ app.post('/workerscheduling-t1/api/admin/trigger-task-reset', async (req, res) =
       result
     });
   } catch (err) {
-    console.error('Manual reset failed:', err);
+    console.error('❌ Manual reset failed:', err);
     res.status(500).json({
       success: false,
       message: err.message
@@ -112,7 +115,8 @@ app.use((req, res) => {
       "POST /workerscheduling-t1/api/auth/login",
       "GET /workerscheduling-t1/api/users",
       "GET /workerscheduling-t1/api/business-areas",
-      "GET /workerscheduling-t1/api/shifts"
+      "GET /workerscheduling-t1/api/shifts",
+      "GET /workerscheduling-t1/api/class-schedule/:userId/:termCode"
     ]
   });
 });
@@ -120,7 +124,7 @@ app.use((req, res) => {
 // ── Error Handler ─────────────────────────────────────────────────────────
 
 app.use((err, req, res, next) => {
-  console.error(" Server Error:", err);
+  console.error("❌ Server Error:", err);
   res.status(err.status || 500).json({
     message: err.message || "Internal Server Error",
     error: process.env.NODE_ENV === 'development' ? err.stack : undefined
@@ -134,15 +138,16 @@ const PORT = process.env.PORT || 3131;
 if (process.env.NODE_ENV !== "test") {
   db.sequelize.sync({ alter: false })
     .then(() => {
-      console.log("Database synced");
+      console.log("✅ Database synced");
       app.listen(PORT, () => {
-        console.log(` Server is running on port ${PORT}`);
-        console.log(` API Base: http://localhost:${PORT}/workerscheduling-t1/api`);
-        console.log(` Cron job active - Daily task reset at midnight CST`);
+        console.log(`🚀 Server is running on port ${PORT}`);
+        console.log(`📡 API Base: http://localhost:${PORT}/workerscheduling-t1/api`);
+        console.log(`📚 Class Schedule: http://localhost:${PORT}/workerscheduling-t1/api/class-schedule`);
+        console.log(`⏰ Cron job active - Daily task reset at midnight CST`);
       });
     })
     .catch(err => {
-      console.error(" Database sync failed:", err);
+      console.error("❌ Database sync failed:", err);
     });
 }
 

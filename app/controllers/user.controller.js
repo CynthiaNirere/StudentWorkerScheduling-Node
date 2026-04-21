@@ -625,3 +625,40 @@ export const remove = async (req, res) => {
     res.status(500).send({ message: "Error deleting user.", error: err.message });
   }
 };
+
+// ── UPDATE EMAIL NOTIFICATION PREFERENCE ──────────────────────────────────
+/**
+ * Update user's email notification preference
+ * PUT /api/users/:id/email-notifications
+ */
+export const updateEmailNotificationPreference = async (req, res) => {
+  try {
+    const userId = req.params.id;
+    const { emailNotifications } = req.body;
+    
+    // Find user
+    const user = await User.findByPk(userId);
+    
+    if (!user) {
+      return res.status(404).send({ message: "User not found" });
+    }
+    
+    // Update preference
+    user.emailNotifications = emailNotifications ? 1 : 0;
+    await user.save();
+    
+    console.log(`✅ Email notifications ${emailNotifications ? 'enabled' : 'disabled'} for user ${userId}`);
+    
+    return res.send({
+      success: true,
+      message: `Email notifications ${emailNotifications ? 'enabled' : 'disabled'}`,
+      emailNotifications: user.emailNotifications
+    });
+    
+  } catch (err) {
+    console.error("❌ Error updating email notification preference:", err);
+    return res.status(500).send({
+      message: err.message || "Error updating email notification preference"
+    });
+  }
+};
