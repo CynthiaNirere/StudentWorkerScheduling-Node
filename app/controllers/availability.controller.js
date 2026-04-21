@@ -42,8 +42,6 @@ export const create = async (req, res) => {
 
 // ── FIND ALL (employer view — scoped to their location) ───────────────────
 // The employer calls this to see their employees' availability.
-// It ONLY returns rows where location_id matches the employer's workplace,
-// so Brew employers never see Gym availability rows, even for shared employees.
 export const findAll = async (req, res) => {
   try {
     const where = {};
