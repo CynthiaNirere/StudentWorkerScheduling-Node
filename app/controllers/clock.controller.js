@@ -416,8 +416,18 @@ export const modify = async (req, res) => {
 // ── DELETE ────────────────────────────────────────────────────────────────
 export const remove = async (req, res) => {
   try {
-    const deleted = await Clock.destroy({ where: { id: getClockId(req) } });
-    if (!deleted) return res.status(404).send({ message: "Clock record not found." });
+    const userId = getUserId(req);
+    const record = await Clock.findByPk(getClockId(req));
+
+    if (!record) return res.status(404).send({ message: "Clock record not found." });
+    if (String(record.userId) !== String(userId)) return res.status(403).send({ message: "Access denied." });
+
+    const deletableStatuses = ['pending', 'clocked_out', 'clocked_in'];
+    if (!deletableStatuses.includes(record.status)) {
+      return res.status(400).send({ message: `Cannot delete a record with status '${record.status}'.` });
+    }
+
+    await record.destroy();
     res.send({ message: "Clock record deleted." });
   } catch (err) {
     console.error("Error deleting clock record:", err);
