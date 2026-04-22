@@ -11,7 +11,7 @@ const getUserId = (req) => req.user?.userId || req.user?.user_id || req.user?.id
 // ── CREATE ────────────────────────────────────────────────────────────────
 export const create = async (req, res) => {
   try {
-    if (!req.body.title) return res.status(400).send({ message: "Title is required!" });
+    if (!req.body.title) return res.status(400) .send({ message: "Title is required!" });
 
     // Accept both camelCase and snake_case from frontend
     const taskList = await TaskList.create({

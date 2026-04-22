@@ -1,26 +1,26 @@
-import User                       from "./user.model.js";
-import Session                    from "./session.model.js";
-import Schedule                   from "./schedule.model.js";
-import Availability                from "./availability.model.js";
-import Clock                      from "./clock.model.js";
-import Coverage                   from "./coverage.models.js";
-import Notification                from "./notifications.models.js";
-import Skill                      from "./skills.models.js";
-import TaskListItem                from "./taskListItem.model.js";
-import TaskList                   from "./taskList.models.js";
-import ShiftSwapRequest            from "./shiftSwapRequest.model.js";
-import ShiftSwapRequestUser        from "./shiftSwapRequestUser.model.js";
-import TimeOffRequest              from "./timeOffRequest.model.js";
-import BusinessArea                from "./businessArea.model.js";
-import JobRole                    from "./jobRole.model.js";
-import Shift                      from "./shift.model.js";
-import ScheduleTemplate            from "./scheduleTemplate.model.js";
-import UserJobRoleModel            from "./userJobRole.model.js";
-import ShiftTaskModel              from "./shiftTask.model.js";
-import MessageModel                from "./message.model.js";
-import TaskCompletionHistoryModel  from "./taskCompletionHistory.model.js";
-import UserWorkplace               from "./userWorkPlace.model.js";
-import TaskAssignment              from "./taskAssignment.model.js";    // ✅ NEW
+import User from "./user.model.js";
+import Session from "./session.model.js";  
+import Schedule from "./schedule.model.js";
+import Availability from "./availability.model.js";
+import Clock from "./clock.model.js";
+import Coverage from "./coverage.models.js";
+import Notification from "./notifications.models.js";
+import Skill from "./skills.models.js";
+import TaskListItem from "./taskListItem.model.js";
+import TaskList from "./taskList.models.js";
+import ShiftSwapRequest from "./shiftSwapRequest.model.js";
+import ShiftSwapRequestUser from "./shiftSwapRequestUser.model.js";
+import TimeOffRequest from "./timeOffRequest.model.js";
+import BusinessArea from "./businessArea.model.js"; 
+import JobRole from "./jobRole.model.js";
+import Shift from "./shift.model.js";
+import ScheduleTemplate from "./scheduleTemplate.model.js";
+import UserJobRoleModel from "./userJobRole.model.js";
+import ShiftTaskModel from "./shiftTask.model.js";
+import MessageModel from "./message.model.js";
+import TaskCompletionHistoryModel from "./taskCompletionHistory.model.js";
+import UserWorkplace from "./userWorkPlace.model.js"; // ✅ NEW
+import TaskAssignmentModel from "./taskAssignment.model.js";
 
 import sequelize from "../config/sequelizeInstance.js";
 import { Sequelize } from "sequelize";
@@ -52,6 +52,7 @@ db.userJobRole           = UserJobRoleModel(sequelize, Sequelize);
 db.shiftTask             = ShiftTaskModel(sequelize, Sequelize);
 db.message               = MessageModel(sequelize, Sequelize);
 db.taskCompletionHistory = TaskCompletionHistoryModel(sequelize, Sequelize);
+db.taskAssignment = TaskAssignmentModel(sequelize, Sequelize);
 
 // ── Associations ──────────────────────────────────────────────────────────
 
@@ -131,12 +132,14 @@ TaskList.hasMany(db.taskCompletionHistory,   { foreignKey: 'taskListId', as: 'co
 db.taskCompletionHistory.belongsTo(TaskList, { foreignKey: 'taskListId', as: 'taskList' });
 TaskListItem.hasMany(db.taskCompletionHistory,   { foreignKey: 'itemId', as: 'history' });
 db.taskCompletionHistory.belongsTo(TaskListItem, { foreignKey: 'itemId', as: 'item' });
-User.hasMany(db.taskCompletionHistory,           { foreignKey: 'completedBy', as: 'completedTasks' });
-db.taskCompletionHistory.belongsTo(User,         { foreignKey: 'completedBy', as: 'completedByUser' });
-Shift.hasMany(db.taskCompletionHistory,          { foreignKey: 'shiftId', as: 'taskCompletions' });
-db.taskCompletionHistory.belongsTo(Shift,        { foreignKey: 'shiftId', as: 'shift' });
 
-// ✅ TaskAssignment associations
-TaskAssignment.belongsTo(TaskList, { foreignKey: 'tasklistId', as: 'taskList' });
-TaskList.hasMany(TaskAssignment, { foreignKey: 'tasklistId', as: 'taskAssignments' });
+db.taskAssignment.belongsTo(TaskList, { foreignKey: 'tasklist_id', as: 'taskList' });
+TaskList.hasMany(db.taskAssignment, { foreignKey: 'tasklist_id', as: 'assignments' });
+
+User.hasMany(db.taskCompletionHistory, { foreignKey: 'completedBy', as: 'completedTasks' });
+db.taskCompletionHistory.belongsTo(User, { foreignKey: 'completedBy', as: 'completedByUser' });
+
+Shift.hasMany(db.taskCompletionHistory, { foreignKey: 'shiftId', as: 'taskCompletions' });
+db.taskCompletionHistory.belongsTo(Shift, { foreignKey: 'shiftId', as: 'shift' });
+
 export default db;

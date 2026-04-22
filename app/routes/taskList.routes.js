@@ -2,6 +2,7 @@ import express from "express";
 import * as taskLists from "../controllers/taskList.controller.js";
 import authenticate from "../authorization/authorization.js";
 import attachLocation from "../authorization/attachLocation.js";
+import * as taskAssignments from "../controllers/taskAssignment.controller.js";
 
 const router = express.Router();
 
@@ -22,5 +23,6 @@ router.get("/daily/:date", authenticate, taskLists.findDailyAssignments);
 router.get("/user/:userId/daily/:date", authenticate, taskLists.findUserDailyTasks);
 router.post("/:id/assign-to-shift", authenticate, taskLists.assignToShift);
 router.get("/history/all", authenticate, taskLists.getCompletionHistory);
+router.get("/my-assignments", authenticate, taskAssignments.getMyAssignedTaskLists);
 
 export default router;
