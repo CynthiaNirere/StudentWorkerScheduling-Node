@@ -329,7 +329,7 @@ export const submitTimecard = async (req, res) => {
 
     // Mark all as 'submitted' — employer can then approve or reject
     await Clock.update(
-      { status: 'pending', updatedAt: Date.now() },
+      { status: 'submitted' },
       { where: { id: { [Op.in]: ids } } }
     );
 
