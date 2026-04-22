@@ -58,7 +58,12 @@ export const create = async (req, res) => {
               fName:      existingUser.fName,
               first_name: existingUser.fName,
             };
-            await sendEmployeeWelcomeEmail(userData, workplaceName, addedByName);
+            const emailResult = await sendEmployeeWelcomeEmail(userData, workplaceName, addedByName);
+            if (emailResult.success) {
+              console.log(`✅ Re-add welcome email sent to ${existingUser.email}`);
+            } else {
+              console.warn(`⚠️ Re-add welcome email failed for ${existingUser.email}:`, emailResult.error);
+            }
           } catch (emailErr) {
             console.warn("Welcome email skipped on re-add:", emailErr.message);
           }
