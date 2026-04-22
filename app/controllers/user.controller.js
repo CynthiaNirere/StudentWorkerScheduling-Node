@@ -6,7 +6,7 @@ const UserWorkplace = db.userWorkplace;
 const BusinessArea  = db.businessArea;
 const { Op }        = db.Sequelize;
 
-// redeploy
+// ── CREATE ────────────────────────────────────────────────────────────────
 export const create = async (req, res) => {
   try {
     const firstName    = req.body.firstName  || req.body.first_name || req.body.fName;
@@ -106,6 +106,7 @@ export const create = async (req, res) => {
       phone_number:  phoneNumber || null,
       role,
       work_location: finalWorkLocation || null,
+      kioskPin:      '0000',   // ✅ default PIN for all new employees
       age:           age || null,
       bio:           bio || null,
       createdAt:     Date.now(),
@@ -123,54 +124,26 @@ export const create = async (req, res) => {
 
     console.log("✅ User created:", user.id, "at work_location:", user.work_location);
 
-    // ✅ NEW: Send welcome email based on role
     try {
-      // Get workplace name for email
       let workplaceName = 'your workplace';
       if (finalWorkLocation && BusinessArea) {
         const workplace = await BusinessArea.findOne({ where: { location_id: finalWorkLocation } });
-        if (workplace) {
-          workplaceName = workplace.name;
-        }
+        if (workplace) workplaceName = workplace.name;
       }
-
-      // Get who added this user
       let addedByName = 'your administrator';
       if (req.user) {
         const addingUser = await User.findOne({ where: { id: req.user.userId || req.user.id } });
-        if (addingUser) {
-          addedByName = `${addingUser.fName} ${addingUser.lName}`;
-        }
+        if (addingUser) addedByName = `${addingUser.fName} ${addingUser.lName}`;
       }
-
-      const userData = {
-        email: user.email,
-        first_name: user.fName,
-        last_name: user.lName,
-        fName: user.fName,
-        lName: user.lName,
-      };
-
-      // Send appropriate email based on role
+      const userData = { email: user.email, first_name: user.fName, last_name: user.lName, fName: user.fName, lName: user.lName };
       if (role === 'employer') {
-        console.log('📧 Sending manager welcome email to:', user.email);
         const emailResult = await sendManagerWelcomeEmail(userData, workplaceName, addedByName);
-        if (emailResult.success) {
-          console.log('✅ Manager welcome email sent successfully');
-        } else {
-          console.error('❌ Failed to send manager welcome email:', emailResult.error);
-        }
+        if (!emailResult.success) console.error('❌ Failed to send manager welcome email:', emailResult.error);
       } else if (role === 'employee') {
-        console.log('📧 Sending employee welcome email to:', user.email);
         const emailResult = await sendEmployeeWelcomeEmail(userData, workplaceName, addedByName);
-        if (emailResult.success) {
-          console.log('✅ Employee welcome email sent successfully');
-        } else {
-          console.error('❌ Failed to send employee welcome email:', emailResult.error);
-        }
+        if (!emailResult.success) console.error('❌ Failed to send employee welcome email:', emailResult.error);
       }
     } catch (emailError) {
-      // Don't fail user creation if email fails
       console.error('❌ Error sending welcome email:', emailError);
     }
 
@@ -196,7 +169,7 @@ export const create = async (req, res) => {
   }
 };
 
-// ── SEARCH USERS BY NAME ──────────────────────────────────────────────────
+// ── SEARCH BY NAME ────────────────────────────────────────────────────────
 export const searchByName = async (req, res) => {
   try {
     const { q } = req.query;
@@ -209,79 +182,47 @@ export const searchByName = async (req, res) => {
     if (!requestingUser) return res.status(401).send({ message: "Unauthorized" });
 
     const currentLocation = req.user?.impersonatedLocation || requestingUser.work_location;
-
     const parts = q.trim().split(/\s+/);
     let whereClause;
     if (parts.length === 1) {
-      whereClause = {
-        role: 'employee',
-        [Op.or]: [
-          { fName: { [Op.like]: `%${parts[0]}%` } },
-          { lName: { [Op.like]: `%${parts[0]}%` } },
-        ],
-      };
+      whereClause = { role: 'employee', [Op.or]: [{ fName: { [Op.like]: `%${parts[0]}%` } }, { lName: { [Op.like]: `%${parts[0]}%` } }] };
     } else {
-      whereClause = {
-        role:  'employee',
-        fName: { [Op.like]: `%${parts[0]}%` },
-        lName: { [Op.like]: `%${parts[1]}%` },
-      };
+      whereClause = { role: 'employee', fName: { [Op.like]: `%${parts[0]}%` }, lName: { [Op.like]: `%${parts[1]}%` } };
     }
 
-    const allMatches = await User.findAll({
-      where:      whereClause,
-      attributes: { exclude: ['password_hash'] },
-      limit:      10,
-    });
+    const allMatches = await User.findAll({ where: whereClause, attributes: { exclude: ['password_hash'] }, limit: 10 });
 
     let alreadyHere = new Set();
     if (currentLocation && UserWorkplace) {
-      const existing = await UserWorkplace.findAll({
-        where: { locationId: currentLocation, isActive: 1 },
-      });
+      const existing = await UserWorkplace.findAll({ where: { locationId: currentLocation, isActive: 1 } });
       existing.forEach(uw => alreadyHere.add(uw.userId));
-
-      // Also mark users whose work_location matches (seeded without UserWorkplace rows)
-      allMatches.forEach(u => {
-        if (String(u.work_location) === String(currentLocation)) alreadyHere.add(u.id);
-      });
+      allMatches.forEach(u => { if (String(u.work_location) === String(currentLocation)) alreadyHere.add(u.id); });
     }
 
     res.send(allMatches.map(u => ({
-      user_id:           u.id,
-      userId:            u.id,
-      fName:             u.fName,
-      lName:             u.lName,
-      first_name:        u.fName,
-      last_name:         u.lName,
-      email:             u.email,
-      phone_number:      u.phone_number,
-      role:              u.role,
-      work_location:     u.work_location,
+      user_id: u.id, userId: u.id, fName: u.fName, lName: u.lName,
+      first_name: u.fName, last_name: u.lName, email: u.email,
+      phone_number: u.phone_number, role: u.role, work_location: u.work_location,
       alreadyAtLocation: alreadyHere.has(u.id),
     })));
-
   } catch (err) {
     console.error("searchByName error:", err);
     res.status(500).send({ message: "Error searching users." });
   }
 };
 
-// ── ASSIGN EXISTING USER TO A WORKPLACE ───────────────────────────────────
+// ── ASSIGN TO WORKPLACE ───────────────────────────────────────────────────
 export const assignToWorkplace = async (req, res) => {
   try {
     const { userId }       = req.params;
     const requestingUserId = req.user?.userId || req.user?.id;
     const requestingUser   = await User.findOne({ where: { id: requestingUserId } });
-
-    const callerRole = req.user?.role || requestingUser?.role;
+    const callerRole       = req.user?.role || requestingUser?.role;
     if (!requestingUser || !['employer', 'admin'].includes(callerRole)) {
       return res.status(403).send({ message: "Only employers can assign employees to workplaces." });
     }
-
     const targetUser = await User.findOne({ where: { id: userId } });
     if (!targetUser) return res.status(404).send({ message: "User not found." });
-
     const locationId = req.user?.impersonatedLocation || requestingUser.work_location;
     if (!locationId) return res.status(400).send({ message: "Employer has no workplace assigned." });
 
@@ -289,51 +230,36 @@ export const assignToWorkplace = async (req, res) => {
       where:    { userId: targetUser.id, locationId },
       defaults: { userId: targetUser.id, locationId, isActive: 1, createdAt: Date.now() },
     });
-
     if (!created && record.isActive === 0) {
-      await UserWorkplace.update(
-        { isActive: 1, terminated_at: null },
-        { where: { userId: targetUser.id, locationId } }
-      );
+      await UserWorkplace.update({ isActive: 1, terminated_at: null }, { where: { userId: targetUser.id, locationId } });
     }
-
     if (!targetUser.work_location) {
-      await User.update(
-        { work_location: locationId, updatedAt: Date.now() },
-        { where: { id: targetUser.id } }
-      );
+      await User.update({ work_location: locationId, updatedAt: Date.now() }, { where: { id: targetUser.id } });
     }
-
     res.send({
-      message:        created ? "Employee assigned to your workplace." : "Employee was already at this workplace.",
+      message: created ? "Employee assigned to your workplace." : "Employee was already at this workplace.",
       alreadyExisted: !created,
-      user_id:        targetUser.id,
-      userId:         targetUser.id,
-      fName:          targetUser.fName,
-      lName:          targetUser.lName,
-      email:          targetUser.email,
-      phone_number:   targetUser.phone_number,
-      role:           targetUser.role,
-      work_location:  targetUser.work_location || locationId,
+      user_id: targetUser.id, userId: targetUser.id,
+      fName: targetUser.fName, lName: targetUser.lName,
+      email: targetUser.email, phone_number: targetUser.phone_number,
+      role: targetUser.role, work_location: targetUser.work_location || locationId,
     });
-
   } catch (err) {
     console.error("assignToWorkplace error:", err);
     res.status(500).send({ message: "Error assigning employee to workplace." });
   }
 };
 
+// ── REMOVE FROM WORKPLACE ─────────────────────────────────────────────────
 export const removeFromWorkplace = async (req, res) => {
   try {
     const { userId }       = req.params;
     const requestingUserId = req.user?.userId || req.user?.id;
     const requestingUser   = await User.findOne({ where: { id: requestingUserId } });
-
-    const callerRole = req.user?.role || requestingUser?.role;
+    const callerRole       = req.user?.role || requestingUser?.role;
     if (!requestingUser || !['employer', 'admin'].includes(callerRole)) {
       return res.status(403).send({ message: "Only employers can remove employees from workplaces." });
     }
-
     const locationId = req.user?.impersonatedLocation || requestingUser.work_location;
     if (!locationId) return res.status(400).send({ message: "Employer has no workplace assigned." });
 
@@ -341,10 +267,7 @@ export const removeFromWorkplace = async (req, res) => {
       { isActive: 0, terminated_at: Date.now() },
       { where: { userId, locationId } }
     );
-
-    if (updated === 0) {
-      return res.status(404).send({ message: "Employee not found at this workplace." });
-    }
+    if (updated === 0) return res.status(404).send({ message: "Employee not found at this workplace." });
 
     await db.sequelize.query(
       'DELETE ujr FROM UserJobRole ujr INNER JOIN Job_Role jr ON ujr.job_role_id = jr.job_role_id WHERE ujr.user_id = ? AND jr.location_id = ?',
@@ -353,253 +276,140 @@ export const removeFromWorkplace = async (req, res) => {
 
     const targetUser = await User.findOne({ where: { id: userId } });
     if (targetUser && String(targetUser.work_location) === String(locationId)) {
-      const remaining = await UserWorkplace.findAll({
-        where: { userId, isActive: 1 },
-      });
+      const remaining = await UserWorkplace.findAll({ where: { userId, isActive: 1 } });
       const newPrimary = remaining.length > 0 ? remaining[0].locationId : null;
-      await User.update(
-        { work_location: newPrimary, updatedAt: Date.now() },
-        { where: { id: userId } }
-      );
+      await User.update({ work_location: newPrimary, updatedAt: Date.now() }, { where: { id: userId } });
     }
-
-    res.send({
-      message: "Employee removed from your workplace. Their account and other workplace records are intact.",
-      userId,
-      locationId,
-    });
-
+    res.send({ message: "Employee removed from your workplace.", userId, locationId });
   } catch (err) {
     console.error("removeFromWorkplace error:", err);
     res.status(500).send({ message: "Error removing employee from workplace." });
   }
 };
 
-
+// ── FIND ALL ──────────────────────────────────────────────────────────────
 export const findAll = async (req, res) => {
   try {
     const requestingUserId = req.user?.userId || req.user?.id;
     if (!requestingUserId) return res.status(401).send({ message: "Unauthorized" });
 
-    const requestingUser = await User.findOne({
-      where:      { id: requestingUserId },
-      attributes: { exclude: ['password_hash'] },
-    });
+    const requestingUser = await User.findOne({ where: { id: requestingUserId }, attributes: { exclude: ['password_hash'] } });
     if (!requestingUser) return res.status(404).send({ message: "User not found" });
 
     const effectiveRole        = req.user?.role || requestingUser.role;
     const impersonatedLocation = req.user?.impersonatedLocation || null;
-
     let users = [];
 
     if (effectiveRole === 'employer' || (requestingUser.role === 'admin' && impersonatedLocation)) {
       const locationId = impersonatedLocation || requestingUser.work_location;
-
       if (!locationId) return res.send([]);
 
-      // ── Step 1: Get IDs from UserWorkplace (active rows only) ──────────
-      const activeRecords = await UserWorkplace.findAll({
-        where: { locationId, isActive: 1 },
-      });
+      const activeRecords = await UserWorkplace.findAll({ where: { locationId, isActive: 1 } });
       const activeViaWorkplaceTable = new Set(activeRecords.map(r => r.userId));
-
-      
-      const terminatedRecords = await UserWorkplace.findAll({
-        where: { locationId, isActive: 0 },
-      });
+      const terminatedRecords = await UserWorkplace.findAll({ where: { locationId, isActive: 0 } });
       const terminatedIds = new Set(terminatedRecords.map(r => r.userId));
 
-      const legacyUsers = await User.findAll({
-        where: {
-          role:          'employee',
-          work_location: locationId,
-        },
-        attributes: { exclude: ['password_hash'] },
-      });
-      const legacyIds = legacyUsers
-        .map(u => u.id)
-        .filter(id => !activeViaWorkplaceTable.has(id) && !terminatedIds.has(id));
+      const legacyUsers = await User.findAll({ where: { role: 'employee', work_location: locationId }, attributes: { exclude: ['password_hash'] } });
+      const legacyIds = legacyUsers.map(u => u.id).filter(id => !activeViaWorkplaceTable.has(id) && !terminatedIds.has(id));
 
-      // ── Step 4: Backfill UserWorkplace rows for legacy/seeded users ────
-      // This repairs the data so future queries work correctly
       for (const legacyId of legacyIds) {
         try {
           await UserWorkplace.findOrCreate({
             where:    { userId: legacyId, locationId },
             defaults: { userId: legacyId, locationId, isActive: 1, createdAt: Date.now() },
           });
-        } catch (e) { /* skip if already exists */ }
+        } catch (e) { /* skip */ }
       }
 
-      // ── Step 5: Combine all valid IDs ─────────────────────────────────
-      const allValidIds = [
-        ...activeViaWorkplaceTable,
-        ...legacyIds,
-      ].filter(id => !terminatedIds.has(id));
-
+      const allValidIds = [...activeViaWorkplaceTable, ...legacyIds].filter(id => !terminatedIds.has(id));
       if (allValidIds.length === 0) return res.send([]);
 
-      users = await User.findAll({
-        where:      { id: { [Op.in]: allValidIds }, role: 'employee' },
-        attributes: { exclude: ['password_hash'] },
-      });
+      users = await User.findAll({ where: { id: { [Op.in]: allValidIds }, role: 'employee' }, attributes: { exclude: ['password_hash'] } });
 
     } else if (requestingUser.role === 'admin') {
       const roleFilter = req.query.role;
       const condition  = roleFilter ? { role: roleFilter } : {};
-      users = await User.findAll({
-        where:      condition,
-        attributes: { exclude: ['password_hash'] },
-      });
+      users = await User.findAll({ where: condition, attributes: { exclude: ['password_hash'] } });
 
     } else if (requestingUser.role === 'employee') {
-      users = await User.findAll({
-        where:      { id: requestingUser.id },
-        attributes: { exclude: ['password_hash'] },
-      });
+      users = await User.findAll({ where: { id: requestingUser.id }, attributes: { exclude: ['password_hash'] } });
 
     } else {
       return res.status(403).send({ message: "Access denied" });
     }
 
     res.send(users.map(u => ({
-      user_id:       u.id,
-      userId:        u.id,
-      first_name:    u.fName,
-      last_name:     u.lName,
-      fName:         u.fName,
-      lName:         u.lName,
-      email:         u.email,
-      phone_number:  u.phone_number,
-      role:          u.role,
-      work_location: u.work_location,
-      age:           u.age,
-      bio:           u.bio,
-      created_at:    u.createdAt,
-      updated_at:    u.updatedAt,
+      user_id: u.id, userId: u.id, first_name: u.fName, last_name: u.lName,
+      fName: u.fName, lName: u.lName, email: u.email, phone_number: u.phone_number,
+      role: u.role, work_location: u.work_location, age: u.age, bio: u.bio,
+      created_at: u.createdAt, updated_at: u.updatedAt,
     })));
-
   } catch (err) {
     console.error("❌ Error retrieving users:", err);
     res.status(500).send({ message: "Error retrieving users." });
   }
 };
 
+// ── FIND ONE ──────────────────────────────────────────────────────────────
 export const findOne = async (req, res) => {
   try {
-    const user = await User.findOne({
-      where:      { id: req.params.id },
-      attributes: { exclude: ['password_hash'] },
-    });
+    const user = await User.findOne({ where: { id: req.params.id }, attributes: { exclude: ['password_hash'] } });
     if (!user) return res.status(404).send({ message: `User not found with id=${req.params.id}` });
-
     res.send({
-      user_id:        user.id,
-      userId:         user.id,
-      first_name:     user.fName,
-      last_name:      user.lName,
-      fName:          user.fName,
-      lName:          user.lName,
-      email:          user.email,
-      phone_number:   user.phone_number,
-      role:           user.role,
-      work_location:  user.work_location,
-      age:            user.age,
-      bio:            user.bio,
-      certifications: user.certifications || [],
-      created_at:     user.createdAt,
-      updated_at:     user.updatedAt,
+      user_id: user.id, userId: user.id, first_name: user.fName, last_name: user.lName,
+      fName: user.fName, lName: user.lName, email: user.email, phone_number: user.phone_number,
+      role: user.role, work_location: user.work_location, age: user.age, bio: user.bio,
+      certifications: user.certifications || [], created_at: user.createdAt, updated_at: user.updatedAt,
     });
   } catch (err) {
     res.status(500).send({ message: "Error retrieving user." });
   }
 };
 
-// ── UPDATE CERTIFICATIONS ─────────────────────────────────────────────────
-export const updateCertifications = async (req, res) => {
-  try {
-    const { certifications } = req.body;
-    await User.update(
-      { certifications: certifications || [] },
-      { where: { id: req.params.id } }
-    );
-    res.send({ message: 'Certifications updated.' });
-  } catch (err) {
-    res.status(500).send({ message: 'Error updating certifications.' });
-  }
-};
-
+// ── FIND BY EMAIL ─────────────────────────────────────────────────────────
 export const findByEmail = async (req, res) => {
   try {
-    const user = await User.findOne({
-      where:      { email: req.params.email },
-      attributes: { exclude: ['password_hash'] },
-    });
+    const user = await User.findOne({ where: { email: req.params.email }, attributes: { exclude: ['password_hash'] } });
     if (!user) return res.status(404).send({ message: `User not found with email=${req.params.email}` });
-
     res.send({
-      user_id:       user.id,
-      userId:        user.id,
-      first_name:    user.fName,
-      last_name:     user.lName,
-      fName:         user.fName,
-      lName:         user.lName,
-      email:         user.email,
-      phone_number:  user.phone_number,
-      role:          user.role,
-      work_location: user.work_location,
-      age:           user.age,
-      bio:           user.bio,
-      created_at:    user.createdAt,
-      updated_at:    user.updatedAt,
+      user_id: user.id, userId: user.id, first_name: user.fName, last_name: user.lName,
+      fName: user.fName, lName: user.lName, email: user.email, phone_number: user.phone_number,
+      role: user.role, work_location: user.work_location, created_at: user.createdAt,
     });
   } catch (err) {
     res.status(500).send({ message: "Error retrieving user." });
   }
 };
 
+// ── UPDATE ────────────────────────────────────────────────────────────────
 export const update = async (req, res) => {
   try {
     const userId     = req.params.id;
     const updateData = {};
-
     if (req.body.firstName  || req.body.first_name || req.body.fName)
       updateData.fName = req.body.firstName || req.body.first_name || req.body.fName;
     if (req.body.lastName   || req.body.last_name  || req.body.lName)
       updateData.lName = req.body.lastName  || req.body.last_name  || req.body.lName;
-    if (req.body.email)
-      updateData.email = req.body.email;
+    if (req.body.email)        updateData.email = req.body.email;
     if (req.body.phoneNumber || req.body.phone_number)
       updateData.phone_number = req.body.phoneNumber || req.body.phone_number;
-    if (req.body.role)
-      updateData.role = req.body.role;
+    if (req.body.role)         updateData.role = req.body.role;
     if (req.body.workLocation !== undefined || req.body.work_location !== undefined)
       updateData.work_location = req.body.workLocation ?? req.body.work_location;
     if (req.body.age !== undefined) updateData.age = req.body.age;
     if (req.body.bio !== undefined) updateData.bio = req.body.bio;
-
     updateData.updatedAt = Date.now();
 
     const [updated] = await User.update(updateData, { where: { id: userId } });
     if (updated !== 1) return res.status(404).send({ message: "User not found or no data changed." });
 
     const user = await User.findOne({ where: { id: userId }, attributes: { exclude: ['password_hash'] } });
-
     res.send({
       message: "User updated successfully.",
       user: {
-        user_id:       user.id,
-        userId:        user.id,
-        first_name:    user.fName,
-        last_name:     user.lName,
-        fName:         user.fName,
-        lName:         user.lName,
-        email:         user.email,
-        phone_number:  user.phone_number,
-        role:          user.role,
-        work_location: user.work_location,
-        age:           user.age,
-        bio:           user.bio,
+        user_id: user.id, userId: user.id, first_name: user.fName, last_name: user.lName,
+        fName: user.fName, lName: user.lName, email: user.email, phone_number: user.phone_number,
+        role: user.role, work_location: user.work_location, age: user.age, bio: user.bio,
       },
     });
   } catch (err) {
@@ -607,24 +417,88 @@ export const update = async (req, res) => {
   }
 };
 
-export const remove = async (req, res) => {
-  const userId = req.params.id;
+// ── UPDATE CERTIFICATIONS ─────────────────────────────────────────────────
+export const updateCertifications = async (req, res) => {
+  try {
+    const { certifications } = req.body;
+    await User.update({ certifications: certifications || [] }, { where: { id: req.params.id } });
+    res.send({ message: 'Certifications updated.' });
+  } catch (err) {
+    res.status(500).send({ message: 'Error updating certifications.' });
+  }
+};
 
+// ── UPDATE EMAIL NOTIFICATION PREFERENCE ──────────────────────────────────
+export const updateEmailNotificationPreference = async (req, res) => {
+  try {
+    const userId = req.params.id;
+    const { emailNotifications } = req.body;
+    const user = await User.findByPk(userId);
+    if (!user) return res.status(404).send({ message: "User not found" });
+    user.emailNotifications = emailNotifications ? 1 : 0;
+    await user.save();
+    return res.send({ success: true, message: `Email notifications ${emailNotifications ? 'enabled' : 'disabled'}`, emailNotifications: user.emailNotifications });
+  } catch (err) {
+    console.error("❌ Error updating email notification preference:", err);
+    return res.status(500).send({ message: err.message || "Error updating email notification preference" });
+  }
+};
+
+// ── KIOSK PIN — GET (employer only) ──────────────────────────────────────
+export const getKioskPin = async (req, res) => {
+  try {
+    const user = await User.findOne({ where: { id: req.params.id }, attributes: ['id', 'fName', 'lName', 'kioskPin'] });
+    if (!user) return res.status(404).send({ message: 'User not found.' });
+    res.send({ kioskPin: user.kioskPin || '0000' });
+  } catch (err) {
+    res.status(500).send({ message: err.message });
+  }
+};
+
+// ── KIOSK PIN — SET (employer sets employee PIN) ──────────────────────────
+export const setKioskPin = async (req, res) => {
+  try {
+    const { pin } = req.body;
+    if (!pin || !/^\d{4}$/.test(pin)) {
+      return res.status(400).send({ message: 'PIN must be exactly 4 digits (numbers only).' });
+    }
+    await User.update({ kioskPin: pin, updatedAt: Date.now() }, { where: { id: req.params.id } });
+    res.send({ message: 'Kiosk PIN updated successfully.' });
+  } catch (err) {
+    res.status(500).send({ message: err.message });
+  }
+};
+
+// ── KIOSK PIN — VERIFY (kiosk calls this, returns valid: true/false) ──────
+export const verifyKioskPin = async (req, res) => {
+  try {
+    const { pin } = req.body;
+    const user    = await User.findOne({ where: { id: req.params.id }, attributes: ['id', 'kioskPin'] });
+    if (!user) return res.status(404).send({ message: 'User not found.' });
+    const stored = user.kioskPin || '0000';
+    if (pin === stored) {
+      res.send({ valid: true });
+    } else {
+      res.status(401).send({ valid: false, message: 'Incorrect PIN.' });
+    }
+  } catch (err) {
+    res.status(500).send({ message: err.message });
+  }
+};
+
+// ── DELETE (admin only) ───────────────────────────────────────────────────
+export const remove = async (req, res) => {
+  const userId     = req.params.id;
   const callerRole = req.user?.role || req.user?.actualRole;
   if (callerRole !== 'admin') {
-    return res.status(403).send({
-      message: "Hard delete is restricted to admins. Use 'Remove from Workplace' to remove an employee from your location.",
-    });
+    return res.status(403).send({ message: "Hard delete is restricted to admins. Use 'Remove from Workplace' to remove an employee from your location." });
   }
-
   const user = await User.findOne({ where: { id: userId } });
   if (!user) return res.status(404).send({ message: "User not found" });
 
   const transaction = await db.sequelize.transaction();
   try {
-    const q = (sql, replacements) =>
-      db.sequelize.query(sql, { replacements, transaction }).catch(e => console.warn(e.message));
-
+    const q = (sql, replacements) => db.sequelize.query(sql, { replacements, transaction }).catch(e => console.warn(e.message));
     await q('DELETE FROM UserWorkplace WHERE user_id = ?',                        [userId]);
     await q('DELETE FROM UserJobRole WHERE user_id = ?',                          [userId]);
     await q('DELETE FROM Session WHERE user_id = ?',                              [userId]);
@@ -641,53 +515,13 @@ export const remove = async (req, res) => {
     await q('UPDATE TaskList SET assigned_to = NULL WHERE assigned_to = ?',       [userId]);
     await q('UPDATE Schedule SET created_by = NULL WHERE created_by = ?',         [userId]);
     await q('DELETE FROM Message WHERE sender_id = ? OR recipient_id = ?',        [userId, userId]);
-
     await User.destroy({ where: { id: userId }, transaction });
     await transaction.commit();
-
     console.log(`✅ Successfully deleted user: ${userId}`);
     res.send({ message: "User deleted successfully.", userId });
-
   } catch (err) {
     await transaction.rollback();
     console.error("❌ Error deleting user:", err);
     res.status(500).send({ message: "Error deleting user.", error: err.message });
-  }
-};
-
-// ── UPDATE EMAIL NOTIFICATION PREFERENCE ──────────────────────────────────
-/**
- * Update user's email notification preference
- * PUT /api/users/:id/email-notifications
- */
-export const updateEmailNotificationPreference = async (req, res) => {
-  try {
-    const userId = req.params.id;
-    const { emailNotifications } = req.body;
-    
-    // Find user
-    const user = await User.findByPk(userId);
-    
-    if (!user) {
-      return res.status(404).send({ message: "User not found" });
-    }
-    
-    // Update preference
-    user.emailNotifications = emailNotifications ? 1 : 0;
-    await user.save();
-    
-    console.log(`✅ Email notifications ${emailNotifications ? 'enabled' : 'disabled'} for user ${userId}`);
-    
-    return res.send({
-      success: true,
-      message: `Email notifications ${emailNotifications ? 'enabled' : 'disabled'}`,
-      emailNotifications: user.emailNotifications
-    });
-    
-  } catch (err) {
-    console.error("❌ Error updating email notification preference:", err);
-    return res.status(500).send({
-      message: err.message || "Error updating email notification preference"
-    });
   }
 };
