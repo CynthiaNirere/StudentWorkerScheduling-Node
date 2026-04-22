@@ -20,6 +20,7 @@ import ShiftTaskModel from "./shiftTask.model.js";
 import MessageModel from "./message.model.js";
 import TaskCompletionHistoryModel from "./taskCompletionHistory.model.js";
 import UserWorkplace from "./userWorkPlace.model.js"; // ✅ NEW
+import TaskAssignmentModel from "./taskAssignment.model.js";
 
 import sequelize from "../config/sequelizeInstance.js";
 import { Sequelize } from "sequelize";
@@ -50,6 +51,7 @@ db.userJobRole           = UserJobRoleModel(sequelize, Sequelize);
 db.shiftTask             = ShiftTaskModel(sequelize, Sequelize);
 db.message               = MessageModel(sequelize, Sequelize);
 db.taskCompletionHistory = TaskCompletionHistoryModel(sequelize, Sequelize);
+db.taskAssignment = TaskAssignmentModel(sequelize, Sequelize);
 
 // ── Associations ──────────────────────────────────────────────────────────
 
@@ -135,6 +137,9 @@ db.taskCompletionHistory.belongsTo(TaskList, { foreignKey: 'taskListId', as: 'ta
 
 TaskListItem.hasMany(db.taskCompletionHistory, { foreignKey: 'itemId', as: 'history' });
 db.taskCompletionHistory.belongsTo(TaskListItem, { foreignKey: 'itemId', as: 'item' });
+
+db.taskAssignment.belongsTo(TaskList, { foreignKey: 'tasklist_id', as: 'taskList' });
+TaskList.hasMany(db.taskAssignment, { foreignKey: 'tasklist_id', as: 'assignments' });
 
 User.hasMany(db.taskCompletionHistory, { foreignKey: 'completedBy', as: 'completedTasks' });
 db.taskCompletionHistory.belongsTo(User, { foreignKey: 'completedBy', as: 'completedByUser' });

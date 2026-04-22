@@ -21,6 +21,7 @@ import shiftTaskRoutes from "./shiftTask.routes.js";
 import messageRoutes from "./message.routes.js";
 import taskCompletionHistoryRoutes from "./taskCompletionHistory.routes.js";
 
+
 const router = express.Router();
 
 router.use("/auth",                authRoutes);
