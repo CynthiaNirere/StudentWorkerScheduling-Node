@@ -46,6 +46,23 @@ export const create = async (req, res) => {
             }
           } catch (e) { console.warn("Auto-assign skipped:", e.message); }
 
+          try {
+            let workplaceName = 'your workplace';
+            const workplace = await BusinessArea.findOne({ where: { location_id: locationId } });
+            if (workplace) workplaceName = workplace.name;
+
+            const addedByName = reqUser ? `${reqUser.fName} ${reqUser.lName}` : 'your administrator';
+
+            const userData = {
+              email:      existingUser.email,
+              fName:      existingUser.fName,
+              first_name: existingUser.fName,
+            };
+            await sendEmployeeWelcomeEmail(userData, workplaceName, addedByName);
+          } catch (emailErr) {
+            console.warn("Welcome email skipped on re-add:", emailErr.message);
+          }
+
           return res.status(200).send({
             message:        "User already exists — assigned to your workplace.",
             alreadyExisted: true,
