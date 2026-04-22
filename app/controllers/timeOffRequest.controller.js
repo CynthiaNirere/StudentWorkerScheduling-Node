@@ -15,13 +15,11 @@ export const findAll = async (req, res) => {
     let requests;
 
     if (role === 'employee') {
-      // Employees only see their own
       requests = await TimeOffRequest.findAll({
         where:  { user_id: requestingUserId },
         order:  [['created_at', 'DESC']],
       });
     } else {
-      // Employers see requests from their workplace employees
       const employeesAtLocation = await db.user.findAll({
         where: { work_location: workLocation, role: 'employee' },
         attributes: ['id', 'fName', 'lName', 'email'],
@@ -33,11 +31,11 @@ export const findAll = async (req, res) => {
         order: [['created_at', 'DESC']],
       });
 
-      // Attach employee names
       const empMap = {};
       employeesAtLocation.forEach(e => {
         empMap[e.id] = `${e.fName || ''} ${e.lName || ''}`.trim() || e.email;
       });
+
       requests = requests.map(r => ({
         ...r.toJSON(),
         employeeName:  empMap[r.user_id] || 'Unknown',
@@ -49,6 +47,21 @@ export const findAll = async (req, res) => {
   } catch (err) {
     console.error("Error retrieving time off requests:", err);
     res.status(500).send({ message: "Error retrieving time off requests." });
+  }
+};
+
+// ── GET PENDING (✅ ADDED — minimal, no logic interference) ────────────────
+export const findPending = async (req, res) => {
+  try {
+    const requests = await TimeOffRequest.findAll({
+      where: { status: 'pending' },
+      order: [['created_at', 'DESC']],
+    });
+
+    res.send(requests);
+  } catch (err) {
+    console.error("Error retrieving pending time off requests:", err);
+    res.status(500).send({ message: "Error retrieving pending time off requests." });
   }
 };
 
@@ -91,11 +104,27 @@ export const create = async (req, res) => {
   }
 };
 
+// ── UPDATE (✅ ADDED — safe generic update) ────────────────────────────────
+export const update = async (req, res) => {
+  try {
+    const id = req.params.id;
+
+    const [updated] = await TimeOffRequest.update(req.body, {
+      where: { id },
+    });
+
+    if (!updated) {
+      return res.status(404).send({ message: "Time off request not found." });
+    }
+
+    res.send({ message: "Time off request updated successfully." });
+  } catch (err) {
+    console.error("Error updating time off request:", err);
+    res.status(500).send({ message: "Error updating time off request." });
+  }
+};
+
 // ── APPROVE ───────────────────────────────────────────────────────────────
-// When approved:
-// 1. Mark request as approved
-// 2. Find all shifts for this employee in the date range
-// 3. Set them to status='open' and clear userId — they become assignable
 export const approve = async (req, res) => {
   try {
     const request = await TimeOffRequest.findByPk(req.params.id);
@@ -106,7 +135,6 @@ export const approve = async (req, res) => {
 
     const approverId = req.user?.userId || req.user?.id;
 
-    // Step 1: approve
     await request.update({
       status:      'approved',
       approved_by: approverId,
@@ -114,14 +142,12 @@ export const approve = async (req, res) => {
       updated_at:  Date.now(),
     });
 
-    // Step 2: open affected shifts
     let openedShifts = 0;
     try {
       const startMs = Number(request.start_date || request.startDate);
       const endMs   = Number(request.end_date   || request.endDate);
       const userId  = request.user_id;
 
-      // Add one day buffer to end so we capture the full last day
       const endMsInclusive = endMs + 24 * 60 * 60 * 1000 - 1;
 
       const affectedShifts = await Shift.findAll({
@@ -134,8 +160,8 @@ export const approve = async (req, res) => {
 
       for (const shift of affectedShifts) {
         await shift.update({
-          userId:    null,       // unassign from employee
-          status:    'open',     // mark as open for reassignment
+          userId:    null,
+          status:    'open',
           updatedAt: Date.now(),
         });
       }
@@ -143,12 +169,11 @@ export const approve = async (req, res) => {
       openedShifts = affectedShifts.length;
       console.log(`✅ Time-off approved: ${openedShifts} shift(s) opened for user ${userId}`);
     } catch (shiftErr) {
-      // Don't fail the approval if shift clearing has an issue
       console.error("Warning: could not open affected shifts:", shiftErr.message);
     }
 
     res.send({
-      message:      "Time off request approved.",
+      message: "Time off request approved.",
       request,
       openedShifts,
     });
