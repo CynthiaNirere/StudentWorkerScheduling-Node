@@ -138,6 +138,5 @@ db.taskCompletionHistory.belongsTo(Shift,        { foreignKey: 'shiftId', as: 's
 
 // ✅ TaskAssignment associations
 TaskAssignment.belongsTo(TaskList, { foreignKey: 'tasklistId', as: 'taskList' });
-TaskList.hasMany(TaskAssignment,   { foreignKey: 'tasklistId', as: 'assignments' });
-
+TaskList.hasMany(TaskAssignment, { foreignKey: 'tasklistId', as: 'taskAssignments' });
 export default db;
