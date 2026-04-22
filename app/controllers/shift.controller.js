@@ -11,22 +11,22 @@ const { Op } = db.Sequelize;
 export const create = async (req, res) => {
   try {
     // Accept both naming conventions for fields
-    const shiftTime = req.body.shiftTime || req.body.shift_time;
-    const startTime = req.body.startTime || req.body.start_time;
-    const endTime = req.body.endTime || req.body.end_time;
+    const shiftTime = req.body.shiftTime !== undefined ? req.body.shiftTime : req.body.shift_time;
+    const startTime = req.body.startTime !== undefined ? req.body.startTime : req.body.start_time;
+    const endTime   = req.body.endTime   !== undefined ? req.body.endTime   : req.body.end_time;
     const locationId = req.body.locationId || req.body.location_id;
     const jobRoleId = req.body.jobRoleId || req.body.job_role_id;
     const userId = req.body.userId || req.body.user_id;
     const notes = req.body.notes;
     const status = req.body.status || 'draft';
     
-    if (!shiftTime || !startTime || !endTime || !locationId) {
+    if (!shiftTime || startTime == null || startTime === '' || endTime == null || endTime === '' || !locationId) {
       return res.status(400).send({ message: "Required fields missing!" });
     }
     
     let createdBy = 'system';
     if (req.user) {
-      createdBy = req.user.userId || req.user.user_id || req.user.id;
+      createdBy = req.user.userId || req.user.user_id || req.user.id || 'system';
     } else if (req.body.createdBy) {
       createdBy = req.body.createdBy;
     }
@@ -54,7 +54,7 @@ export const create = async (req, res) => {
         // Get location and job role details for email
         const [workplace, jobRole] = await Promise.all([
           BusinessArea.findOne({ where: { location_id: locationId } }),
-          JobRole.findOne({ where: { id: jobRoleId } })
+          JobRole.findOne({ where: { job_role_id: jobRoleId } })
         ]);
         
         const shiftDate = new Date(parseInt(shiftTime)).toLocaleDateString();
