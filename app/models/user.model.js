@@ -1,66 +1,71 @@
 import { DataTypes } from "sequelize";
 import sequelize from "../config/sequelizeInstance.js";
-//
+
 const User = sequelize.define(
   "User",
   {
     id: {
-      type: DataTypes.STRING(255),
+      type:       DataTypes.STRING(255),
       primaryKey: true,
-      field: "user_id",
+      field:      "user_id",
     },
     email: {
-      type: DataTypes.STRING(255),
+      type:      DataTypes.STRING(255),
       allowNull: false,
-      unique: true,
-      validate: {
-        isEmail: true,
-      },
+      unique:    true,
+      validate:  { isEmail: true },
     },
     password_hash: {
-      type: DataTypes.STRING(255),
+      type:      DataTypes.STRING(255),
       allowNull: true,
     },
     fName: {
-      type: DataTypes.STRING(255),
+      type:      DataTypes.STRING(255),
       allowNull: false,
-      field: "first_name",
+      field:     "first_name",
     },
     lName: {
-      type: DataTypes.STRING(255),
+      type:      DataTypes.STRING(255),
       allowNull: false,
-      field: "last_name",
+      field:     "last_name",
     },
     phone_number: {
-      type: DataTypes.STRING(40),
+      type:      DataTypes.STRING(40),
       allowNull: true,
     },
     role: {
-      type: DataTypes.STRING(255),
-      allowNull: false,
+      type:         DataTypes.STRING(255),
+      allowNull:    false,
       defaultValue: "employee",
     },
     job_role: {
-      type: DataTypes.STRING(255),
+      type:      DataTypes.STRING(255),
       allowNull: true,
     },
     work_location: {
-      type: DataTypes.INTEGER,
+      type:      DataTypes.INTEGER,
       allowNull: true,
     },
+    // ✅ NEW: Kiosk PIN — 4 digits, default 0000
+    kioskPin: {
+      type:         DataTypes.STRING(4),
+      allowNull:    true,
+      defaultValue: '0000',
+      field:        'kiosk_pin',
+    },
     createdAt: {
-      type: DataTypes.BIGINT,
-      allowNull: false,
-      field: "created_at",
+      type:         DataTypes.BIGINT,
+      allowNull:    false,
+      field:        "created_at",
       defaultValue: () => Date.now(),
     },
     updatedAt: {
-      type: DataTypes.BIGINT,
+      type:      DataTypes.BIGINT,
       allowNull: true,
-      field: "updated_at",
+      field:     "updated_at",
     },
     certifications: {
-      type: DataTypes.TEXT('long'),
+      type:      DataTypes.TEXT('long'),
       allowNull: true,
       get() {
         const raw = this.getDataValue('certifications');
@@ -72,7 +77,7 @@ const User = sequelize.define(
     },
   },
   {
-    tableName: "User",
+    tableName:  "User",
     timestamps: false,
   }
 );
