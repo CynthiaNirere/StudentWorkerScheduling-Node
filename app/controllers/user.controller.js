@@ -47,6 +47,28 @@ export const create = async (req, res) => {
             }
           } catch (e) { console.warn("Auto-assign skipped:", e.message); }
 
+          try {
+            let workplaceName = 'your workplace';
+            const workplace = await BusinessArea.findOne({ where: { location_id: locationId } });
+            if (workplace) workplaceName = workplace.name;
+
+            const addedByName = reqUser ? `${reqUser.fName} ${reqUser.lName}` : 'your administrator';
+
+            const userData = {
+              email:      existingUser.email,
+              fName:      existingUser.fName,
+              first_name: existingUser.fName,
+            };
+            const emailResult = await sendEmployeeWelcomeEmail(userData, workplaceName, addedByName);
+            if (emailResult.success) {
+              console.log(`✅ Re-add welcome email sent to ${existingUser.email}`);
+            } else {
+              console.warn(`⚠️ Re-add welcome email failed for ${existingUser.email}:`, emailResult.error);
+            }
+          } catch (emailErr) {
+            console.warn("Welcome email skipped on re-add:", emailErr.message);
+          }
+
           return res.status(200).send({
             message:        "User already exists — assigned to your workplace.",
             alreadyExisted: true,
@@ -246,6 +268,11 @@ export const removeFromWorkplace = async (req, res) => {
       { where: { userId, locationId } }
     );
     if (updated === 0) return res.status(404).send({ message: "Employee not found at this workplace." });
+
+    await db.sequelize.query(
+      'DELETE ujr FROM UserJobRole ujr INNER JOIN Job_Role jr ON ujr.job_role_id = jr.job_role_id WHERE ujr.user_id = ? AND jr.location_id = ?',
+      { replacements: [userId, locationId] }
+    ).catch(e => console.warn("UserJobRole cleanup skipped:", e.message));
 
     const targetUser = await User.findOne({ where: { id: userId } });
     if (targetUser && String(targetUser.work_location) === String(locationId)) {
@@ -473,6 +500,7 @@ export const remove = async (req, res) => {
   try {
     const q = (sql, replacements) => db.sequelize.query(sql, { replacements, transaction }).catch(e => console.warn(e.message));
     await q('DELETE FROM UserWorkplace WHERE user_id = ?',                        [userId]);
+    await q('DELETE FROM UserJobRole WHERE user_id = ?',                          [userId]);
     await q('DELETE FROM Session WHERE user_id = ?',                              [userId]);
     await q('DELETE FROM Availability WHERE user_id = ?',                         [userId]);
     await q('DELETE FROM UserSkill WHERE user_id = ?',                            [userId]);

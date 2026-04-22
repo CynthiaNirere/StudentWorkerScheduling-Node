@@ -13,6 +13,7 @@ export const shouldSendEmail = async (userId) => {
     if (!user || !user.email) return false;
     
     // Check if user has emailNotifications preference set to true
+    // This field should be added to User model
     return user.emailNotifications === true || user.emailNotifications === 1;
   } catch (error) {
     console.error('Error checking email preference:', error);

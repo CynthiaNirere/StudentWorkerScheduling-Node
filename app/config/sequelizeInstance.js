@@ -9,6 +9,10 @@ const sequelize = new Sequelize(
     host: dbConfig.HOST,
     port: dbConfig.PORT,
     dialect: dbConfig.dialect,
+    dialectOptions: {
+      supportBigNumbers: true,
+      bigNumberStrings: true,
+    },
     pool: {
       max: dbConfig.pool.max,
       min: dbConfig.pool.min,
